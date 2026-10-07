@@ -1,0 +1,77 @@
+name: Scheduled collectors
+
+on:
+  workflow_dispatch:
+    inputs:
+      collector:
+        description: Collector to run
+        type: choice
+        required: true
+        default: pci
+        options: [pci, predicted, documents]
+  schedule:
+    - cron: "17 5,13,21 * * *"
+    - cron: "37 9 * * *"
+    - cron: "47 11 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  pci:
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 5,13,21 * * *') || (github.event_name == 'workflow_dispatch' && inputs.collector == 'pci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: radar-pci-collector
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run collect:pci
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PCI_MCP_URL: ${{ vars.PCI_MCP_URL }}
+          ENABLE_PCI_COLLECTOR: ${{ vars.ENABLE_PCI_COLLECTOR }}
+          PCI_SANITY_MAX_ITEMS: ${{ vars.PCI_SANITY_MAX_ITEMS }}
+
+  predicted:
+    if: (github.event_name == 'schedule' && github.event.schedule == '37 9 * * *') || (github.event_name == 'workflow_dispatch' && inputs.collector == 'predicted')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    concurrency:
+      group: radar-web-discovery
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run collect:predicted
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXA_MCP_URL: ${{ vars.EXA_MCP_URL }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          ENABLE_WEB_DISCOVERY: ${{ vars.ENABLE_WEB_DISCOVERY }}
+
+  documents:
+    if: (github.event_name == 'schedule' && github.event.schedule == '47 11 * * 0') || (github.event_name == 'workflow_dispatch' && inputs.collector == 'documents')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: radar-document-collector
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run collect:documents -- --max-concursos=5 --max-files-per-contest=5 --concurrency=1
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ENABLE_DOCUMENT_COLLECTOR: ${{ vars.ENABLE_DOCUMENT_COLLECTOR }}

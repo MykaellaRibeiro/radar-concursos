@@ -1,0 +1,2 @@
+-- Retired application migration retained only to match remote history. No
+-- CodePulse cron jobs or Vault secrets are created in new environments.

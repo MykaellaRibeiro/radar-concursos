@@ -1,0 +1,2 @@
+-- Retired application migration retained only to match the remote migration
+-- history. Its public objects are removed by 20261005150000.

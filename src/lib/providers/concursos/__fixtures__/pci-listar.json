@@ -1,0 +1,31 @@
+{
+  "meta": { "total": 2, "data_atual": "2026-10-05", "filtros": { "regiao": "nordeste", "professores": false } },
+  "data": [
+    {
+      "id": 294690,
+      "titulo": "SEFAZ - Secretaria de Estado da Fazenda de Alagoas",
+      "cargos_resumo": "Auditor Fiscal da Administração Tributária Estadual",
+      "cargos": ["AUDITOR FISCAL DA ADMINISTRAÇÃO TRIBUTÁRIA ESTADUAL"],
+      "vagas_salario": "40 vagas + 60 CR até R$ 25.270,68",
+      "formacao": "Superior",
+      "regiao": "NORDESTE",
+      "uf": "AL",
+      "datas": { "inicio": "2026-09-17", "fim": "2026-10-21", "texto": "", "aberto": true, "dias_restantes": 16 },
+      "noticia": { "id": 294690, "titulo": "Sefaz - AL abre concurso público com vagas para o cargo de Auditor Fiscal", "link": "https://www.pciconcursos.com.br/noticias/sefaz-al-abre-concurso-publico-com-vagas-para-o-cargo-de-auditor-fiscal" },
+      "apostila": null
+    },
+    {
+      "id": 292162,
+      "titulo": "CBMAL - Corpo de Bombeiros Militar de Alagoas",
+      "cargos_resumo": "Oficial de Estado-Maior, Soldado",
+      "cargos": ["ALUNO-SOLDADO", "OFICIAL DE ESTADO-MAIOR", "SOLDADO"],
+      "vagas_salario": "172 vagas até R$ 11.563,77",
+      "formacao": "Ensino Médio",
+      "regiao": "NORDESTE",
+      "uf": "AL",
+      "datas": { "inicio": "2026-09-18", "fim": "2026-10-26", "texto": "Reaberto", "aberto": true, "dias_restantes": 21 },
+      "noticia": { "id": 292162, "titulo": "CBM - AL reabre inscrições de concurso público", "link": "https://www.pciconcursos.com.br/noticias/cbm-al-reabre-concurso-publico" },
+      "apostila": { "colecao_id": 17593, "produto_id": 68369 }
+    }
+  ]
+}
