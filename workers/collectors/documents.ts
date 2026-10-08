@@ -10,11 +10,20 @@ import { nextDocumentVersion } from "../../src/lib/documents/versioning";
 import { documentPilotCandidates } from "./document-pilot";
 import { discoverCatalogDocuments, type DocumentDiscoveryReport } from "./document-discovery";
 import { ExaSearchProvider } from "../../src/lib/providers/search/exa";
+import { SerperSearchProvider } from "../../src/lib/providers/search/serper";
 import type { SearchProvider } from "../../src/lib/providers/search/types";
 import { errorContext, operationalLog } from "../../src/lib/operations/logger";
 import { beginCollectorRun, finishCollectorRun, heartbeatCollectorRun } from "../lib/collector-runtime";
 
 const BUCKET = "radar-documentos";
+
+function defaultDocumentSearchProvider(): SearchProvider {
+  const preferred = process.env.DOCUMENT_SEARCH_PROVIDER?.trim().toLowerCase();
+  if (preferred === "exa") return new ExaSearchProvider();
+  if (preferred && preferred !== "serper") throw new Error(`Provedor documental inválido: ${preferred}.`);
+  if (process.env.SERPER_API_KEY?.trim()) return new SerperSearchProvider();
+  return new ExaSearchProvider();
+}
 
 export interface DocumentCollectionOptions {
   dryRun?: boolean;
@@ -30,6 +39,7 @@ export interface DocumentCollectionOptions {
 
 export interface DocumentCollectionSummary {
   provider: "document_collector";
+  searchProvider: string;
   dryRun: boolean;
   found: number;
   discoveredByExa: number;
@@ -400,7 +410,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
 
   constructor(
     private readonly client: SupabaseClient = adminClient(),
-    private readonly searchProvider: SearchProvider = new ExaSearchProvider(),
+    private readonly searchProvider: SearchProvider = defaultDocumentSearchProvider(),
   ) {}
 
   async discover(options: DocumentCollectionOptions = {}): Promise<DocumentDiscoveryReport> {
@@ -426,7 +436,8 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
     const start = options.dryRun ? null : await beginCollectorRun(this.client, "document_collector", this.name, { bucket: BUCKET, concurrency: options.concurrency ?? 1 });
     const collectionId = start?.state === "acquired" ? start.lease.runId : null;
     const summary: DocumentCollectionSummary = {
-      provider: "document_collector", dryRun: Boolean(options.dryRun), found: 0,
+      provider: "document_collector", searchProvider: this.searchProvider.name,
+      dryRun: Boolean(options.dryRun), found: 0,
       discoveredByExa: 0, discoveryCatalogTotal: 0, discoveryCatalogOffset: 0,
       discoveryContestsSearched: 0, discoveryResultsFound: 0,
       discoveryRejected: 0, downloaded: 0,
@@ -503,6 +514,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
         error: summary.errors.length ? new Error(summary.errors.map((item) => `${item.key}: ${item.message}`).join(" | ")) : undefined,
         metadata: {
           bucket: BUCKET, downloaded: summary.downloaded, uploaded: summary.uploaded, duplicates: summary.duplicateFiles,
+          searchProvider: summary.searchProvider,
           extracted: summary.extracted, partial: summary.partial, scanned: summary.scanned, failed: summary.failed,
           discoveredByExa: summary.discoveredByExa, discoveryContestsSearched: summary.discoveryContestsSearched,
           discoveryCatalogTotal: summary.discoveryCatalogTotal, discoveryCatalogOffset: summary.discoveryCatalogOffset,

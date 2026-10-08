@@ -14,14 +14,13 @@ export class DocumentSearchProvider {
   async discover(subject: DocumentDiscoverySubject): Promise<SearchResult[]> {
     const context = [subject.organization, subject.state, subject.role, subject.board, subject.year].filter(Boolean).join(" ");
     const queries = [
-      `"${subject.organization}" edital concurso filetype:pdf`,
-      `${context} prova concurso filetype:pdf`,
-      `${context} gabarito concurso filetype:pdf`,
-      `${context} resultado final classificação concurso filetype:pdf`,
-      `${context} "nota de corte" concurso filetype:pdf`,
+      `"${subject.organization}" (edital OR retificação) concurso filetype:pdf`,
+      `${context} (prova OR "caderno de questões" OR gabarito) concurso filetype:pdf`,
+      `${context} ("resultado final" OR classificação OR "nota de corte") concurso filetype:pdf`,
+      `${context} (concorrência OR demanda OR "candidatos por vaga") concurso filetype:pdf`,
     ];
     const batches = await Promise.all(queries.map((query) => this.searchProvider.search(query, {
-      limit: 5,
+      limit: 10,
       objective: "Localizar PDFs de concurso verificáveis, preferindo órgão oficial, banca e Diário Oficial. Não inferir que uma URL pertence ao certame sem evidência de órgão, ano e documento.",
     })));
     return [...new Map(batches.flat().map((result) => [result.url, result])).values()];
