@@ -30,7 +30,11 @@ async function main() {
   });
 
   console.info(JSON.stringify(summary, null, 2));
-  if (summary.errors.length) process.exitCode = 1;
+  // Individual public portals commonly block automated PDF downloads or fail
+  // transiently. Keep those failures visible in the summary, but do not mark a
+  // useful partial batch as a failed workflow. A batch is fatal only when every
+  // discovered candidate failed before any document could be downloaded.
+  if (summary.errors.length && summary.found > 0 && summary.downloaded === 0) process.exitCode = 1;
 }
 
 main().catch((error) => {

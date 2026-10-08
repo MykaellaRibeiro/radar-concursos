@@ -9,6 +9,7 @@ import type { DownloadedDocument } from "./types";
 
 const PDF_SIGNATURE = Buffer.from("%PDF-");
 const ACCEPTED_CONTENT_TYPES = new Set(["application/pdf", "application/octet-stream", "binary/octet-stream"]);
+const BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 
 export function isAcceptedPdfContentType(value: string | null): boolean {
   if (!value) return true;
@@ -53,7 +54,12 @@ export async function downloadPdf(
           response = await fetch(currentUrl, {
             redirect: "manual",
             signal: controller.signal,
-            headers: { accept: "application/pdf,application/octet-stream;q=0.8", "user-agent": "RadarConcursosDocumentCollector/1.0" },
+            headers: {
+              accept: "application/pdf,application/octet-stream;q=0.9,*/*;q=0.7",
+              "accept-language": "pt-BR,pt;q=0.9,en;q=0.7",
+              "cache-control": "no-cache",
+              "user-agent": BROWSER_USER_AGENT,
+            },
           });
         } finally {
           clearTimeout(timer);
