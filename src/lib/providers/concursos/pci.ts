@@ -3,6 +3,7 @@ import { deduplicateContests, normalizeUf, transformPciItem, type RawPciItem } f
 import type { ConcursoSearchInput, ConcursosProvider, NormalizedContest, ProviderHealth } from "./types";
 
 const expectedTools = ["listar_concursos", "pesquisar_concursos", "buscar_por_cargo", "buscar_por_cidade"];
+const DEFAULT_PCI_ENDPOINT = "https://mcp.pciconcursos.com.br/mcp";
 
 interface PciPayload {
   meta?: { total?: number; timestamp?: number; data_atual?: string; filtros?: Record<string, unknown> };
@@ -24,6 +25,10 @@ export interface PciCallStats {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function resolvePciEndpoint(explicit?: string): string {
+  return explicit?.trim() || process.env.PCI_MCP_URL?.trim() || DEFAULT_PCI_ENDPOINT;
 }
 
 export function parsePciPayload(result: CallToolResult): PciPayload {
@@ -51,7 +56,7 @@ export class PciConcursosProvider implements ConcursosProvider {
 
   constructor(options: PciProviderOptions | string = {}) {
     const normalized = typeof options === "string" ? { endpoint: options } : options;
-    this.endpoint = normalized.endpoint ?? process.env.PCI_MCP_URL ?? "https://mcp.pciconcursos.com.br/mcp";
+    this.endpoint = resolvePciEndpoint(normalized.endpoint);
     this.timeoutMs = normalized.timeoutMs ?? 45_000;
     this.retries = Math.max(0, Math.min(normalized.retries ?? 2, 3));
   }
