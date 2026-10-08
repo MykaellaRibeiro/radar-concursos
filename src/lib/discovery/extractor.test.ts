@@ -39,4 +39,41 @@ describe("discovery extractor", () => {
 
     expect(discovery.vacancies).toBeNull();
   });
+
+  it("reconhece a Cesgranrio como banca", () => {
+    const discovery = extractDiscovery({
+      title: "Concurso Banco do Brasil tem banca definida",
+      url: "https://www.bb.com.br/concurso",
+      snippet: "A Fundação Cesgranrio foi escolhida para organizar a seleção.",
+      publishedAt: "2026-10-08T09:00:00.000Z",
+      domain: "bb.com.br",
+      content: null,
+      provider: "fixture",
+      retrievedAt: "2026-10-08T12:00:00.000Z",
+      metadata: {},
+    }, []);
+
+    expect(discovery.boardName).toBe("Cesgranrio");
+  });
+
+  it("identifica o banco por seu domínio oficial", () => {
+    const discovery = extractDiscovery({
+      title: "BANCO BRB DIVULGA EDITAL PARA NOVO CONCURSO",
+      url: "https://novo.brb.com.br/imprensa/edital-concurso",
+      snippet: "O edital foi publicado pelo Banco BRB.",
+      publishedAt: "2022-07-08T09:00:00.000Z",
+      domain: "novo.brb.com.br",
+      content: null,
+      provider: "fixture",
+      retrievedAt: "2026-10-08T12:00:00.000Z",
+      metadata: {},
+    }, []);
+
+    expect(discovery).toMatchObject({
+      orgaoName: "Banco de Brasília",
+      orgaoAcronym: "BRB",
+      sourceTier: "OFFICIAL",
+      rejectionReason: null,
+    });
+  });
 });

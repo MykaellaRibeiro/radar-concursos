@@ -16,6 +16,7 @@ async function main() {
     maxFileSize: numberFlag("max-file-size", 15 * 1024 * 1024),
     timeoutMs: numberFlag("timeout", 20_000),
     concurrency: numberFlag("concurrency", 1),
+    discovery: process.argv.includes("--pilot-only") ? false : undefined,
   });
 
   console.info(JSON.stringify(summary, null, 2));

@@ -1,8 +1,11 @@
 import type { ConfidenceLevel } from "@/types/domain";
 import type { SourceTier } from "./types";
 
-const OFFICIAL_SUFFIXES = ["gov.br", "jus.br", "leg.br", "mp.br", "def.br"];
-const BOARDS = ["cebraspe.org.br", "fgv.br", "fcc.org.br", "vunesp.com.br", "institutoaocp.org.br", "ibfc.org.br"];
+const OFFICIAL_SUFFIXES = [
+  "gov.br", "jus.br", "leg.br", "mp.br", "def.br", "bb.com.br", "caixa.gov.br", "bndes.gov.br",
+  "bnb.gov.br", "bancoamazonia.com.br", "brb.com.br", "banrisul.com.br",
+];
+const BOARDS = ["cebraspe.org.br", "fgv.br", "fcc.org.br", "vunesp.com.br", "institutoaocp.org.br", "ibfc.org.br", "cesgranrio.org.br"];
 const SPECIALIZED_HIGH = ["folha.qconcursos.com", "estrategiaconcursos.com.br", "concursos.estrategia.com", "blog.grancursosonline.com.br", "grancursosonline.com.br", "pciconcursos.com.br", "jcconcursos.com.br", "jcconcursos.uol.com.br"];
 const SPECIALIZED = ["direcaoconcursos.com.br", "acheconcursos.com.br", "qconcursos.com"];
 

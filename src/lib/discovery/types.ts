@@ -31,5 +31,5 @@ export interface ExtractedDiscovery {
   vacancies: number | null;
   boardName: string | null;
   eventDate: string;
-  rejectionReason: "irrelevant" | "missing_contest_context" | "old_content" | "duplicate" | "ambiguous" | "insufficient_evidence" | "unsupported_event" | null;
+  rejectionReason: "irrelevant" | "missing_contest_context" | "missing_event_date" | "old_content" | "duplicate" | "ambiguous" | "insufficient_evidence" | "unsupported_event" | null;
 }

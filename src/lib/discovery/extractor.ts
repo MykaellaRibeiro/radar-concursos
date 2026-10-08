@@ -21,7 +21,23 @@ const BOARD_PATTERNS: Array<[string, RegExp]> = [
   ["Cebraspe", /\b(?:cebraspe|cespe)\b/i], ["FGV", /\bfgv\b|funda[cç][aã]o getulio vargas/i],
   ["FCC", /\bfcc\b|funda[cç][aã]o carlos chagas/i], ["Vunesp", /\bvunesp\b/i],
   ["Instituto AOCP", /\baocp\b/i], ["IBFC", /\bibfc\b/i],
+  ["Cesgranrio", /\bcesgranrio\b|funda[cç][aã]o cesgranrio/i],
 ];
+
+const OFFICIAL_BANK_ORGANIZATIONS = [
+  { domain: "bb.com.br", name: "Banco do Brasil", acronym: "BB" },
+  { domain: "caixa.gov.br", name: "Caixa Econômica Federal", acronym: "CAIXA" },
+  { domain: "bndes.gov.br", name: "Banco Nacional de Desenvolvimento Econômico e Social", acronym: "BNDES" },
+  { domain: "bnb.gov.br", name: "Banco do Nordeste do Brasil", acronym: "BNB" },
+  { domain: "bancoamazonia.com.br", name: "Banco da Amazônia", acronym: "BASA" },
+  { domain: "brb.com.br", name: "Banco de Brasília", acronym: "BRB" },
+  { domain: "banrisul.com.br", name: "Banco do Estado do Rio Grande do Sul", acronym: "Banrisul" },
+] as const;
+
+function officialBankOrganization(domain: string) {
+  const normalized = domain.replace(/^www\./, "").toLowerCase();
+  return OFFICIAL_BANK_ORGANIZATIONS.find((organization) => normalized === organization.domain || normalized.endsWith(`.${organization.domain}`)) ?? null;
+}
 
 function extractVacancies(text: string): number | null {
   const match = text.match(/(?:autoriza(?:das?|[cç][aã]o de)?|oferta(?:r[aá])?|com)?\s*([\d.]{1,9})\s+vagas?\b/i);
@@ -51,14 +67,15 @@ export function extractDiscovery(result: SearchResult, organizations: Organizati
   const uf = explicitUf(`${result.title}\n${result.snippet ?? ""}`);
   const organizationMatch = matchOrganization(text, uf, organizations);
   const organization = organizationMatch?.organization ?? null;
-  const inferred = organization ? null : inferOrganizationLabel(result.title, uf);
+  const officialBank = organization ? null : officialBankOrganization(result.domain);
+  const inferred = organization || officialBank ? null : inferOrganizationLabel(result.title, uf);
   const legalName = organization ? null : extractLegalOrganizationName(text, inferred?.name ?? null);
   const sourceTier = rankSource(result.domain);
   const boardName = BOARD_PATTERNS.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
   const eventDate = (result.publishedAt ?? result.retrievedAt).slice(0, 10);
   let rejectionReason: ExtractedDiscovery["rejectionReason"] = null;
   if (!eventType) rejectionReason = "unsupported_event";
-  else if (!organization && !inferred) rejectionReason = "missing_contest_context";
+  else if (!organization && !officialBank && !inferred) rejectionReason = "missing_contest_context";
 
   return {
     result,
@@ -67,9 +84,9 @@ export function extractDiscovery(result: SearchResult, organizations: Organizati
     sourceTier,
     confidence: confidenceForEvidence([sourceTier]),
     orgaoId: organization?.id ?? null,
-    orgaoName: organization?.name ?? inferred?.name ?? null,
+    orgaoName: organization?.name ?? officialBank?.name ?? inferred?.name ?? null,
     orgaoLegalName: legalName,
-    orgaoAcronym: organization?.acronym ?? inferred?.acronym ?? null,
+    orgaoAcronym: organization?.acronym ?? officialBank?.acronym ?? inferred?.acronym ?? null,
     organizationMatchScore: organizationMatch?.score ?? 0,
     matchedExistingOrganization: Boolean(organization),
     uf: organization?.uf ?? uf,

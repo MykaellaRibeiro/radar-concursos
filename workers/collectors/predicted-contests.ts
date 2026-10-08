@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { DISCOVERY_QUERIES, OFFICIAL_CONFIRMATION_DOMAINS } from "../../src/lib/discovery/config";
+import { BANKING_DISCOVERY_QUERIES, DISCOVERY_QUERIES, OFFICIAL_CONFIRMATION_DOMAINS } from "../../src/lib/discovery/config";
 import { extractDiscovery, type OrganizationCandidate } from "../../src/lib/discovery/extractor";
 import { matchExistingContest } from "../../src/lib/discovery/contest-matcher";
 import { buildEventFingerprint } from "../../src/lib/discovery/fingerprint";
@@ -81,6 +81,16 @@ function adminClient(): SupabaseClient {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+function collectionClient(dryRun: boolean): SupabaseClient {
+  if (dryRun && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para a simulação.");
+    return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  }
+  return adminClient();
+}
+
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -119,14 +129,14 @@ function eventTitle(event: NonNullable<ExtractedDiscovery["eventType"]>) {
   return labels[event];
 }
 
-async function loadCatalog(client: SupabaseClient) {
+async function loadCatalog(client: SupabaseClient, allowMissingAliases = false) {
   const [{ data: organizations, error: orgError }, { data: aliases, error: aliasError }, { data: contests, error: contestError }] = await Promise.all([
     client.from("orgaos").select("id,nome,sigla,uf,cidade"),
     client.from("orgao_aliases").select("orgao_id,alias"),
     client.from("concursos").select("id,orgao_id,titulo,slug,status,confidence,uf,cidade,regiao,escolaridade_resumo,salario_max,vagas_previstas,banca_status,banca_observacao"),
   ]);
   if (orgError) throw orgError;
-  if (aliasError) throw aliasError;
+  if (aliasError && !allowMissingAliases) throw aliasError;
   if (contestError) throw contestError;
   const aliasMap = new Map<string, string[]>();
   for (const row of aliases ?? []) aliasMap.set(row.orgao_id, [...(aliasMap.get(row.orgao_id) ?? []), row.alias]);
@@ -144,6 +154,10 @@ function makeGroups(extracted: ExtractedDiscovery[], catalog: Awaited<ReturnType
   for (const event of extracted) {
     if (event.rejectionReason || !event.eventType || !event.orgaoName) continue;
     if (!event.orgaoId) {
+      if (!event.result.publishedAt) {
+        event.rejectionReason = "missing_event_date";
+        continue;
+      }
       const fingerprint = buildEventFingerprint({ orgao: event.orgaoAcronym ?? event.orgaoName, uf: event.uf, eventType: event.eventType, eventDate: event.eventDate });
       const current = potential.get(fingerprint);
       if (current) current.evidence.push(event);
@@ -221,8 +235,10 @@ function slugify(value: string) {
 async function ensureNewContest(client: SupabaseClient, group: PotentialNewGroup): Promise<{ contest: DbContest; created: boolean }> {
   const orgSlug = `${slugify(group.organizationName)}-${(group.uf ?? "br").toLowerCase()}`;
   const region = regionFromUf(group.uf);
+  const officialEvidence = group.evidence.find((evidence) => evidence.sourceTier === "OFFICIAL");
   const { data: organization, error: orgError } = await client.from("orgaos").upsert({
     nome: group.organizationName, sigla: group.organizationAcronym, slug: orgSlug, tipo: "OUTRO", uf: group.uf,
+    site_oficial: officialEvidence?.result.url,
   }, { onConflict: "slug" }).select("id,nome,sigla,uf,cidade").single();
   if (orgError) throw orgError;
   const status = group.event.status ?? "PREVISTO";
@@ -351,18 +367,28 @@ async function persistGroup(client: SupabaseClient, group: AcceptedGroup) {
 
 async function executePredictedCollection(options: PredictedCollectionOptions = {}): Promise<PredictedCollectionSummary> {
   const dryRun = options.dryRun ?? false;
-  const client = options.client ?? adminClient();
+  const client = options.client ?? collectionClient(dryRun);
   const provider = options.provider ?? new ExaSearchProvider();
   const configuredQueries = options.queries ?? DISCOVERY_QUERIES;
   const queryLimit = Math.min(Math.max(Number(process.env.DISCOVERY_QUERY_LIMIT ?? configuredQueries.length), 1), configuredQueries.length);
-  const queries = configuredQueries.slice(0, queryLimit);
+  const bankingQueryLimit = options.queries
+    ? 0
+    : Math.min(Math.max(Number(process.env.DISCOVERY_BANKING_QUERY_LIMIT ?? BANKING_DISCOVERY_QUERIES.length), 0), BANKING_DISCOVERY_QUERIES.length);
+  const recentQueries = configuredQueries.slice(0, queryLimit);
+  const bankingQueries = BANKING_DISCOVERY_QUERIES.slice(0, bankingQueryLimit);
+  const queries = [...recentQueries, ...bankingQueries];
   const limit = Math.min(Math.max(Number(process.env.DISCOVERY_RESULTS_PER_QUERY ?? 5), 1), 8);
-  const catalog = await loadCatalog(client);
+  const catalog = await loadCatalog(client, dryRun && !process.env.SUPABASE_SERVICE_ROLE_KEY);
   const results: SearchResult[] = [];
   const errors: string[] = [];
   for (const query of queries) {
     try {
-      const queryResults = await provider.searchRecent(query, 7, { limit });
+      const queryResults = bankingQueries.includes(query as (typeof BANKING_DISCOVERY_QUERIES)[number])
+        ? await provider.search(query, {
+            limit,
+            objective: "Localizar concursos públicos bancários verificáveis, inclusive históricos, priorizando o banco, a banca e documentos oficiais.",
+          })
+        : await provider.searchRecent(query, 7, { limit });
       results.push(...queryResults.map((result) => ({ ...result, metadata: { ...result.metadata, query } })));
     } catch (error) {
       errors.push(`${query}: ${error instanceof Error ? error.message : String(error)}`);

@@ -7,6 +7,9 @@ import { documentStoragePath } from "../../src/lib/documents/storage-path";
 import type { ContestSeed, DocumentCandidate, DownloadedDocument, PdfExtraction } from "../../src/lib/documents/types";
 import { nextDocumentVersion } from "../../src/lib/documents/versioning";
 import { documentPilotCandidates } from "./document-pilot";
+import { discoverCatalogDocuments, type DocumentDiscoveryReport } from "./document-discovery";
+import { ExaSearchProvider } from "../../src/lib/providers/search/exa";
+import type { SearchProvider } from "../../src/lib/providers/search/types";
 import { errorContext, operationalLog } from "../../src/lib/operations/logger";
 import { beginCollectorRun, finishCollectorRun, heartbeatCollectorRun } from "../lib/collector-runtime";
 
@@ -19,12 +22,17 @@ export interface DocumentCollectionOptions {
   maxFileSize?: number;
   timeoutMs?: number;
   concurrency?: number;
+  discovery?: boolean;
 }
 
 export interface DocumentCollectionSummary {
   provider: "document_collector";
   dryRun: boolean;
   found: number;
+  discoveredByExa: number;
+  discoveryContestsSearched: number;
+  discoveryResultsFound: number;
+  discoveryRejected: number;
   downloaded: number;
   uploaded: number;
   duplicateFiles: number;
@@ -75,6 +83,22 @@ function limitedCandidates(options: DocumentCollectionOptions): DocumentCandidat
     counts.set(item.contestSlug, count + 1);
     return true;
   });
+}
+
+function discoveryEnabled(options: DocumentCollectionOptions) {
+  if (typeof options.discovery === "boolean") return options.discovery;
+  return !/^(?:0|false|off)$/i.test(process.env.ENABLE_DOCUMENT_DISCOVERY ?? "true");
+}
+
+function pilotDiscovery(options: DocumentCollectionOptions): DocumentDiscoveryReport {
+  const candidates = limitedCandidates(options);
+  return {
+    candidates,
+    contestsSearched: new Set(candidates.map((item) => item.contestSlug)).size,
+    resultsFound: candidates.length,
+    rejected: 0,
+    errors: [],
+  };
 }
 
 async function ensureContest(client: SupabaseClient, slug: string, seed?: ContestSeed): Promise<string> {
@@ -310,10 +334,19 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
   readonly name = "document_collector";
   stats: DocumentCollectionSummary | null = null;
 
-  constructor(private readonly client: SupabaseClient = adminClient()) {}
+  constructor(
+    private readonly client: SupabaseClient = adminClient(),
+    private readonly searchProvider: SearchProvider = new ExaSearchProvider(),
+  ) {}
 
-  discover(options: DocumentCollectionOptions = {}) {
-    return limitedCandidates(options);
+  async discover(options: DocumentCollectionOptions = {}): Promise<DocumentDiscoveryReport> {
+    if (!discoveryEnabled(options)) return pilotDiscovery(options);
+    return discoverCatalogDocuments({
+      client: this.client,
+      searchProvider: this.searchProvider,
+      maxContests: Math.min(Math.max(options.maxConcursos ?? 5, 1), 10),
+      maxFilesPerContest: Math.min(Math.max(options.maxFilesPerContest ?? 5, 1), 10),
+    });
   }
 
   async healthCheck() {
@@ -324,16 +357,31 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
   async run(options: DocumentCollectionOptions = {}): Promise<DocumentCollectionSummary> {
     if ((options.concurrency ?? 1) > 4) throw new Error("Concorrência máxima permitida: 4.");
     const startedAt = new Date().toISOString();
-    const candidates = this.discover(options);
     const start = options.dryRun ? null : await beginCollectorRun(this.client, "document_collector", this.name, { bucket: BUCKET, concurrency: options.concurrency ?? 1 });
     const collectionId = start?.state === "acquired" ? start.lease.runId : null;
     const summary: DocumentCollectionSummary = {
-      provider: "document_collector", dryRun: Boolean(options.dryRun), found: candidates.length, downloaded: 0,
+      provider: "document_collector", dryRun: Boolean(options.dryRun), found: 0,
+      discoveredByExa: 0, discoveryContestsSearched: 0, discoveryResultsFound: 0,
+      discoveryRejected: 0, downloaded: 0,
       uploaded: 0, duplicateFiles: 0, editaisCreated: 0, provasCreated: 0, gabaritosCreated: 0,
       extracted: 0, partial: 0, scanned: 0, failed: 0, errors: [], startedAt, finishedAt: startedAt, collectionId,
       outcome: start && start.state !== "acquired" ? start.state : "completed",
     };
     if (start && start.state !== "acquired") return summary;
+    let discovery: DocumentDiscoveryReport;
+    try {
+      discovery = await this.discover(options);
+    } catch (error) {
+      if (start?.state === "acquired") await finishCollectorRun(this.client, start.lease, { status: "FAILED", error });
+      throw error;
+    }
+    const candidates = discovery.candidates;
+    summary.found = candidates.length;
+    summary.discoveredByExa = discoveryEnabled(options) ? candidates.length : 0;
+    summary.discoveryContestsSearched = discovery.contestsSearched;
+    summary.discoveryResultsFound = discovery.resultsFound;
+    summary.discoveryRejected = discovery.rejected;
+    summary.errors.push(...discovery.errors);
     const proofIds = new Map<string, string>();
 
     for (const candidate of candidates) {
@@ -378,7 +426,12 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
         created: summary.editaisCreated + summary.provasCreated + summary.gabaritosCreated,
         unchanged: summary.duplicateFiles, rejected: summary.failed, errorCount: summary.errors.length,
         error: summary.errors.length ? new Error(summary.errors.map((item) => `${item.key}: ${item.message}`).join(" | ")) : undefined,
-        metadata: { bucket: BUCKET, downloaded: summary.downloaded, uploaded: summary.uploaded, duplicates: summary.duplicateFiles, extracted: summary.extracted, partial: summary.partial, scanned: summary.scanned, failed: summary.failed },
+        metadata: {
+          bucket: BUCKET, downloaded: summary.downloaded, uploaded: summary.uploaded, duplicates: summary.duplicateFiles,
+          extracted: summary.extracted, partial: summary.partial, scanned: summary.scanned, failed: summary.failed,
+          discoveredByExa: summary.discoveredByExa, discoveryContestsSearched: summary.discoveryContestsSearched,
+          discoveryResultsFound: summary.discoveryResultsFound, discoveryRejected: summary.discoveryRejected,
+        },
       });
     }
     this.stats = summary;
@@ -387,5 +440,12 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
 }
 
 export async function runDocumentCollection(options: DocumentCollectionOptions = {}) {
+  if (options.dryRun && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para a simulação.");
+    const readOnlyClient = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    return new DocumentCollector(readOnlyClient).run(options);
+  }
   return new DocumentCollector().run(options);
 }
