@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { PciConcursosProvider } from "../../src/lib/providers/concursos/pci";
-import { comparisonText } from "../../src/lib/providers/concursos/pci-transform";
+import { comparisonText, deduplicateContests } from "../../src/lib/providers/concursos/pci-transform";
 import type { NormalizedContest } from "../../src/lib/providers/concursos/types";
 import { errorContext, operationalLog } from "../../src/lib/operations/logger";
 import { beginCollectorRun, finishCollectorRun, heartbeatCollectorRun } from "../lib/collector-runtime";
@@ -20,6 +20,17 @@ type ExistingContest = {
   fim_inscricoes: string | null;
   deduplication_key: string | null;
 };
+
+const SUPPLEMENTAL_CATALOG_QUERIES = [
+  "Banco do Brasil",
+  "Caixa Econômica Federal",
+  "BNDES",
+  "Banco do Nordeste",
+  "Banco da Amazônia",
+  "BRB",
+  "Banrisul",
+  "Banco Central",
+] as const;
 
 export interface CollectionSummary {
   found: number;
@@ -233,17 +244,39 @@ export async function runPciCollection(options: { client?: SupabaseClient; provi
   const { lease } = start;
 
   try {
-    const contests = await provider.list();
-    const stats = provider.lastCallStats;
+    const broadCatalog = await provider.list();
+    const broadStats = provider.lastCallStats;
+    const supplementalLimit = Math.min(Math.max(Number(process.env.PCI_SUPPLEMENTAL_QUERY_LIMIT ?? SUPPLEMENTAL_CATALOG_QUERIES.length), 0), SUPPLEMENTAL_CATALOG_QUERIES.length);
+    const collected = [...broadCatalog];
+    let received = broadStats.received;
+    let normalized = broadStats.normalized;
+    let discarded = broadStats.discarded;
+    const supplementalErrors: string[] = [];
+    for (const query of SUPPLEMENTAL_CATALOG_QUERIES.slice(0, supplementalLimit)) {
+      try {
+        const results = await provider.search({ query });
+        const queryStats = provider.lastCallStats;
+        collected.push(...results);
+        received += queryStats.received;
+        normalized += queryStats.normalized;
+        discarded += queryStats.discarded;
+      } catch (error) {
+        supplementalErrors.push(`${query}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const contests = deduplicateContests(collected);
+    const stats = { received, normalized, discarded, unique: contests.length };
     const sanityLimit = Math.min(Math.max(Number(process.env.PCI_SANITY_MAX_ITEMS ?? 2500), 100), 10_000);
     if (stats.received > sanityLimit) throw Object.assign(new Error(`O PCI retornou ${stats.received} itens; limite de segurança: ${sanityLimit}.`), { code: "SANITY_LIMIT" });
     await heartbeatCollectorRun(client, lease);
     const persisted = await persistCatalog(client, contests);
-    const summary: CollectionSummary = { found: stats.received, normalized: stats.normalized, discarded: stats.discarded, unique: stats.unique, ...persisted, errors: 0, collectionId: lease.runId, outcome: "completed" };
+    const summary: CollectionSummary = { found: stats.received, normalized: stats.normalized, discarded: stats.discarded, unique: stats.unique, ...persisted, errors: supplementalErrors.length, collectionId: lease.runId, outcome: "completed" };
     await finishCollectorRun(client, lease, {
-      status: "SUCCESS", found: summary.found, created: summary.created, updated: summary.updated,
+      status: supplementalErrors.length ? "PARTIAL" : "SUCCESS", found: summary.found, created: summary.created, updated: summary.updated,
       unchanged: summary.unchanged, rejected: summary.discarded,
-      metadata: { normalized: summary.normalized, unique: summary.unique, transport: "streamable-http" },
+      errorCount: supplementalErrors.length,
+      error: supplementalErrors.length ? new Error(supplementalErrors.join(" | ")) : undefined,
+      metadata: { normalized: summary.normalized, unique: summary.unique, supplementalQueries: supplementalLimit, transport: "streamable-http" },
     });
     return summary;
   } catch (error) {

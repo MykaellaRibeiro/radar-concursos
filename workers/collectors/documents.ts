@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Collector } from "../../src/lib/collectors/types";
 import { downloadPdf } from "../../src/lib/documents/downloader";
+import { extractExplicitCutoffScores } from "../../src/lib/documents/cutoff";
 import { extractPdfText } from "../../src/lib/documents/pdf";
 import { documentStoragePath } from "../../src/lib/documents/storage-path";
 import type { ContestSeed, DocumentCandidate, DownloadedDocument, PdfExtraction } from "../../src/lib/documents/types";
@@ -39,6 +40,8 @@ export interface DocumentCollectionSummary {
   editaisCreated: number;
   provasCreated: number;
   gabaritosCreated: number;
+  resultadosCreated: number;
+  cutoffsCreated: number;
   extracted: number;
   partial: number;
   scanned: number;
@@ -302,7 +305,62 @@ async function persistSemanticDocument(input: {
     if (row.error) throw row.error;
     return { created: true, proofId };
   }
+  if (candidate.kind === "RESULTADO") {
+    const existing = await client.from("resultados").select("id").eq("concurso_id", contestId).eq("arquivo_id", file.id).maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) return { created: false, proofId: null };
+    const row = await client.from("resultados").insert({
+      concurso_id: contestId, cargo_id: roleId, arquivo_id: file.id, tipo: candidate.semanticType,
+      titulo: candidate.title, url: candidate.sourceUrl, storage_bucket: file.storage_bucket,
+      storage_path: file.storage_path, sha256: file.sha256, published_at: candidate.publishedAt,
+    });
+    if (row.error) throw row.error;
+    return { created: true, proofId: null };
+  }
   return { created: false, proofId: null };
+}
+
+async function persistExplicitCutoffs(input: {
+  client: SupabaseClient;
+  candidate: DocumentCandidate;
+  contestId: string;
+  roleId: string | null;
+  sourceId: string;
+  file: PersistedFile;
+  extraction: PdfExtraction;
+}) {
+  if (input.candidate.kind !== "RESULTADO") return 0;
+  const scores = extractExplicitCutoffScores(input.extraction.text);
+  let created = 0;
+  for (const score of scores) {
+    let query = input.client.from("notas_corte").select("id")
+      .eq("concurso_id", input.contestId)
+      .eq("modalidade", score.modality)
+      .eq("nota", score.score)
+      .eq("arquivo_id", input.file.id);
+    query = input.roleId ? query.eq("cargo_id", input.roleId) : query.is("cargo_id", null);
+    const existing = await query.maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) continue;
+    const inserted = await input.client.from("notas_corte").insert({
+      concurso_id: input.contestId,
+      cargo_id: input.roleId,
+      modalidade: score.modality,
+      nota: score.score,
+      classificacao: score.classification,
+      ano: input.candidate.exam?.year ?? null,
+      arquivo_id: input.file.id,
+      fonte_id: input.sourceId,
+      source_url: input.candidate.sourceUrl,
+      published_at: input.candidate.publishedAt,
+      confidence: "OFFICIAL",
+      extraction_method: "explicit-cutoff-v1",
+      raw_metadata: { evidence: score.evidence, document_key: input.candidate.key },
+    });
+    if (inserted.error) throw inserted.error;
+    created += 1;
+  }
+  return created;
 }
 
 async function persistMovement(client: SupabaseClient, candidate: DocumentCandidate, contestId: string, sourceId: string, sha256: string) {
@@ -364,6 +422,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
       discoveredByExa: 0, discoveryContestsSearched: 0, discoveryResultsFound: 0,
       discoveryRejected: 0, downloaded: 0,
       uploaded: 0, duplicateFiles: 0, editaisCreated: 0, provasCreated: 0, gabaritosCreated: 0,
+      resultadosCreated: 0, cutoffsCreated: 0,
       extracted: 0, partial: 0, scanned: 0, failed: 0, errors: [], startedAt, finishedAt: startedAt, collectionId,
       outcome: start && start.state !== "acquired" ? start.state : "completed",
     };
@@ -409,6 +468,11 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
         if (semantic.created && ['EDITAL', 'RETIFICACAO'].includes(candidate.kind)) summary.editaisCreated += 1;
         if (semantic.created && candidate.kind === "PROVA") summary.provasCreated += 1;
         if (semantic.created && candidate.kind === "GABARITO") summary.gabaritosCreated += 1;
+        if (semantic.created && candidate.kind === "RESULTADO") summary.resultadosCreated += 1;
+        summary.cutoffsCreated += await persistExplicitCutoffs({
+          client: this.client, candidate, contestId, roleId: relations.roleId, sourceId,
+          file: persisted.file, extraction,
+        });
         await persistMovement(this.client, candidate, contestId, sourceId, persisted.file.sha256);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -423,7 +487,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
       const status = summary.errors.length === 0 ? "SUCCESS" : summary.downloaded > 0 ? "PARTIAL" : "FAILED";
       await finishCollectorRun(this.client, start.lease, {
         status, found: summary.found,
-        created: summary.editaisCreated + summary.provasCreated + summary.gabaritosCreated,
+        created: summary.editaisCreated + summary.provasCreated + summary.gabaritosCreated + summary.resultadosCreated + summary.cutoffsCreated,
         unchanged: summary.duplicateFiles, rejected: summary.failed, errorCount: summary.errors.length,
         error: summary.errors.length ? new Error(summary.errors.map((item) => `${item.key}: ${item.message}`).join(" | ")) : undefined,
         metadata: {
@@ -431,6 +495,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
           extracted: summary.extracted, partial: summary.partial, scanned: summary.scanned, failed: summary.failed,
           discoveredByExa: summary.discoveredByExa, discoveryContestsSearched: summary.discoveryContestsSearched,
           discoveryResultsFound: summary.discoveryResultsFound, discoveryRejected: summary.discoveryRejected,
+          resultadosCreated: summary.resultadosCreated, cutoffsCreated: summary.cutoffsCreated,
         },
       });
     }

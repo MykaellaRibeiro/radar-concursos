@@ -17,6 +17,8 @@ npm run collect:pci
 
 O endpoint é MCP, não REST improvisado. O collector abre uma sessão Streamable HTTP, faz uma chamada ampla a `listar_concursos`, fecha a sessão e só então trabalha localmente. Não há scraping HTML nem uma chamada por concurso.
 
+Além do lote amplo, buscas suplementares cobrem instituições bancárias que historicamente aparecem de forma incompleta na listagem geral. Os lotes são unidos e deduplicados antes de qualquer escrita; falha suplementar torna a execução parcial sem apagar o catálogo já confirmado.
+
 ## Idempotência e histórico
 
 Cada concurso conserva `provider`, `external_id` e uma `deduplication_key` SHA-256 formada por órgão, UF, título, cargos, URL e datas. Restrições únicas no banco tornam o upsert idempotente. Órgãos, cargos, relações e evidências também usam conflitos explícitos.
@@ -69,7 +71,7 @@ npm run collect:documents -- --dry-run
 npm run collect:documents
 ```
 
-O `DocumentCollector` implementa `discover`, `download`, `deduplicate`, `persist` e `extract` como etapas separadas do PCI. O piloto aceita no máximo 10 concursos, 10 arquivos por concurso, concorrência máxima 4, PDF de até 15 MiB por padrão, timeout de 20 segundos, até duas novas tentativas e três redirects. Cada destino redirecionado passa novamente pela proteção SSRF.
+O `DocumentCollector` implementa `discover`, `download`, `deduplicate`, `persist` e `extract` como etapas separadas do PCI. A descoberta Exa aceita no máximo 10 concursos, 10 arquivos por concurso, concorrência máxima 4, PDF de até 15 MiB por padrão, timeout de 20 segundos, até duas novas tentativas e três redirects. Cada destino redirecionado passa novamente pela proteção SSRF.
 
 O dry-run faz download, hash e extração, mas não cria `coletas`, objetos ou linhas. Na persistência, o SHA-256 identifica o blob; hash já conhecido reutiliza `arquivos` e não envia outra cópia. Mesma URL com conteúdo diferente cria versão nova e aponta `supersedes_id` para a versão anterior.
 

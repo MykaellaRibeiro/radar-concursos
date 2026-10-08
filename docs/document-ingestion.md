@@ -8,7 +8,9 @@ O entrypoint é `npm run collect:documents`. O worker fica em `workers/collector
 
 ## Descoberta e revisão
 
-O provider de busca pode localizar PDFs em domínios oficiais e de bancas. Seus resultados são candidatos, não autorização de persistência. O piloto persistente vive em `workers/collectors/document-pilot.ts` e contém somente URLs verificadas, classificação semântica, concurso, fonte e relações conhecidas.
+O provider Exa localiza PDFs em domínios oficiais e de bancas. Seus resultados continuam sendo candidatos: somente PDF direto, fonte oficial/banca reconhecida e correspondência explícita com o órgão seguem para download, assinatura, extração e persistência. O manifesto piloto permanece disponível por `--pilot-only` como diagnóstico controlado.
+
+Resultados e classificações também entram no acervo. A extração de nota de corte é deliberadamente estrita: exige a expressão explícita no texto do PDF e preserva trecho, arquivo, fonte e método. Notas comuns, anos e estimativas editoriais não viram nota de corte.
 
 ## Download seguro
 

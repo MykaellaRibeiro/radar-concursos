@@ -1,11 +1,13 @@
 import { Search, SlidersHorizontal } from "lucide-react";
 
+const states = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+
 export function Filters({ values = {} }: { values?: Record<string, string | undefined> }) {
   return (
     <form className="filters" action="/concursos">
       <div className="filter-search"><Search size={17} /><label className="sr-only" htmlFor="filter-q">Buscar</label><input id="filter-q" name="q" defaultValue={values.q} placeholder="Órgão, cargo ou cidade" /></div>
       <label><span className="sr-only">Status</span><select name="status" defaultValue={values.status ?? ""}><option value="">Todos os status</option><option value="AUTORIZADO">Autorizado</option><option value="BANCA_DEFINIDA">Banca definida</option><option value="EDITAL_PUBLICADO">Edital publicado</option><option value="INSCRICOES_ABERTAS">Inscrições abertas</option></select></label>
-      <label><span className="sr-only">Estado</span><select name="uf" defaultValue={values.uf ?? ""}><option value="">Todos os estados</option><option>CE</option><option>MA</option><option>PE</option><option>PI</option></select></label>
+      <label><span className="sr-only">Estado</span><select name="uf" defaultValue={values.uf ?? ""}><option value="">Todos os estados</option>{states.map((state) => <option key={state}>{state}</option>)}</select></label>
       <button className="button button--secondary" type="submit"><SlidersHorizontal size={17} /> Filtrar</button>
       <details className="advanced-filters"><summary>Mais filtros</summary><div className="advanced-filters__grid">
         <label>Região<select name="regiao" defaultValue={values.regiao ?? ""}><option value="">Todas</option><option>Norte</option><option>Nordeste</option><option>Centro-Oeste</option><option>Sudeste</option><option>Sul</option></select></label>

@@ -71,7 +71,21 @@ export interface ConcursoDetail extends ConcursoSummary {
   cargos: Array<{ id: string; nome: string; vagas: number | null; salarioInicial: number | null }>;
   editais: EditalDocument[];
   provas: ProofDocument[];
+  notasCorte: CutoffScore[];
   documentos: DocumentFile[];
+}
+
+export interface CutoffScore {
+  id: string;
+  modality: string;
+  score: number;
+  classification: number | null;
+  year: number | null;
+  role: string | null;
+  sourceUrl: string | null;
+  sourceName: string | null;
+  publishedAt: string | null;
+  confidence: ConfidenceLevel;
 }
 
 export type ExtractionStatus = "PENDING" | "TEXT" | "PARTIAL" | "SCANNED" | "FAILED" | "NOT_APPLICABLE";

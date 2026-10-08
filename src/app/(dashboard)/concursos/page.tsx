@@ -11,6 +11,13 @@ export default async function ConcursosPage({ searchParams }: { searchParams: Pr
   const values = Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]));
   const status = concursoStatuses.includes(values.status as ConcursoStatus) ? values.status as ConcursoStatus : undefined;
   const salary = Number(values.salario_min);
-  const items = await listConcursos(undefined, { query: values.q, status, region: values.regiao, state: values.uf, city: values.cidade, education: values.escolaridade, minimumSalary: Number.isFinite(salary) && salary > 0 ? salary : undefined, area: values.area, board: values.banca });
-  return <><header className="page-header"><div><h1>Concursos</h1><p>Encontre oportunidades e compare o que já foi confirmado em cada fonte.</p></div></header>{items.some((item) => item.isMock) && <MockNotice />}<Filters values={values} /><ConcursoList items={items} /></>;
+  const page = Math.max(1, Number.parseInt(values.pagina ?? "1", 10) || 1);
+  const items = await listConcursos(undefined, { query: values.q, status, region: values.regiao, state: values.uf, city: values.cidade, education: values.escolaridade, minimumSalary: Number.isFinite(salary) && salary > 0 ? salary : undefined, area: values.area, board: values.banca }, page);
+  const pageUrl = (nextPage: number) => {
+    const params = new URLSearchParams(Object.entries(values).filter((entry): entry is [string, string] => Boolean(entry[1])));
+    params.set("pagina", String(nextPage));
+    return `/concursos?${params.toString()}`;
+  };
+  return <><header className="page-header"><div><h1>Concursos</h1><p>Encontre oportunidades e compare o que já foi confirmado em cada fonte.</p></div></header>{items.some((item) => item.isMock) && <MockNotice />}<Filters values={values} /><ConcursoList items={items} /><nav className="page-actions" aria-label="Paginação de concursos">{page > 1 && <Link className="button button--secondary" href={pageUrl(page - 1)}>Página anterior</Link>}<span className="numeric">Página {page}</span>{items.length === 50 && <Link className="button button--secondary" href={pageUrl(page + 1)}>Próxima página</Link>}</nav></>;
 }
+import Link from "next/link";

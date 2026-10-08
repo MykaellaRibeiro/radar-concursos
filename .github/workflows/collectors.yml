@@ -37,6 +37,7 @@ jobs:
           PCI_MCP_URL: ${{ vars.PCI_MCP_URL }}
           ENABLE_PCI_COLLECTOR: ${{ vars.ENABLE_PCI_COLLECTOR }}
           PCI_SANITY_MAX_ITEMS: ${{ vars.PCI_SANITY_MAX_ITEMS }}
+          PCI_SUPPLEMENTAL_QUERY_LIMIT: ${{ vars.PCI_SUPPLEMENTAL_QUERY_LIMIT }}
 
   predicted:
     if: (github.event_name == 'schedule' && github.event.schedule == '37 9 * * *') || (github.event_name == 'workflow_dispatch' && inputs.collector == 'predicted')

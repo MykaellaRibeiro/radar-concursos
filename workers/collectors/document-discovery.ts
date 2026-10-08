@@ -120,6 +120,10 @@ function classifyDocument(result: SearchResult): { kind: DocumentKind; semanticT
   if (/\b(?:gabarito|respostas? definitivas?)\b/.test(text)) {
     return { kind: "GABARITO", semanticType: /preliminar/.test(text) ? "PRELIMINAR" : /retificad/.test(text) ? "RETIFICADO" : "DEFINITIVO" };
   }
+  if (/\b(?:resultado final|classificacao final|lista (?:final )?de classificados|nota (?:minima )?(?:de )?corte)\b/.test(text)) {
+    return { kind: "RESULTADO", semanticType: /preliminar/.test(text) ? "PRELIMINAR" : "DEFINITIVO" };
+  }
+  if (/\b(?:concorrencia|demanda de candidatos|candidatos por vaga)\b/.test(text)) return { kind: "CONCORRENCIA", semanticType: "DEMANDA" };
   if (/\b(?:prova|caderno|questoes)\b/.test(text)) return { kind: "PROVA", semanticType: "OBJETIVA" };
   if (/\bretifica(?:cao|dor|do)?\b/.test(text) && /\bedital\b/.test(text)) return { kind: "RETIFICACAO", semanticType: "RETIFICACAO" };
   if (/\bedital\b/.test(text)) return { kind: "EDITAL", semanticType: "ABERTURA" };
@@ -166,7 +170,7 @@ export function resultToDocumentCandidate(result: SearchResult, contest: Catalog
     notice: classification.kind === "EDITAL" || classification.kind === "RETIFICACAO"
       ? { number: null, year: resultYear }
       : undefined,
-    exam: classification.kind === "PROVA" || classification.kind === "GABARITO"
+    exam: ["PROVA", "GABARITO", "RESULTADO", "CONCORRENCIA"].includes(classification.kind)
       ? {
           year: resultYear,
           boardName: contest.board,

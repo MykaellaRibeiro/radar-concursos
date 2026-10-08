@@ -32,5 +32,5 @@ export const mockDetail: ConcursoDetail = {
     { id: "m2", titulo: "Comissão formada", descricao: "Registro demonstrativo para a timeline.", eventDate: "2026-09-12", occurredAt: null, confidence: "MEDIUM", sourceName: null, sourceUrl: null, sources: [] },
     { id: "m1", titulo: "Concurso solicitado", descricao: "Início do histórico demonstrativo.", eventDate: "2026-08-20", occurredAt: null, confidence: "LOW", sourceName: null, sourceUrl: null, sources: [] },
   ],
-  cargos: [], editais: [], provas: [], documentos: [],
+  cargos: [], editais: [], provas: [], notasCorte: [], documentos: [],
 };
