@@ -12,6 +12,7 @@
     "collect:pci": "tsx --env-file-if-exists=.env.local workers/collectors/pci.ts",
     "collect:predicted": "tsx --env-file-if-exists=.env.local scripts/collect-predicted.ts",
     "collect:documents": "tsx --env-file-if-exists=.env.local scripts/collect-documents.ts",
+    "backfill:documents": "tsx --env-file-if-exists=.env.local scripts/backfill-documents.ts",
     "parse:exam": "tsx --env-file-if-exists=.env.local scripts/parse-exam.ts",
     "check:pci": "tsx scripts/check-pci.ts",
     "test:exa": "tsx --env-file-if-exists=.env.local scripts/check-exa.ts",
