@@ -59,8 +59,8 @@ export class ExaSearchProvider implements SearchProvider {
   private readonly timeoutMs: number;
 
   constructor(options: { endpoint?: string; apiKey?: string; timeoutMs?: number } = {}) {
-    this.endpoint = options.endpoint ?? process.env.EXA_MCP_URL ?? DEFAULT_ENDPOINT;
-    this.apiKey = options.apiKey ?? process.env.EXA_API_KEY;
+    this.endpoint = options.endpoint?.trim() || process.env.EXA_MCP_URL?.trim() || DEFAULT_ENDPOINT;
+    this.apiKey = options.apiKey?.trim() || process.env.EXA_API_KEY?.trim() || undefined;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
