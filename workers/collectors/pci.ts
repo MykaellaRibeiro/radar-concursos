@@ -32,6 +32,16 @@ const SUPPLEMENTAL_CATALOG_QUERIES = [
   "Banco Central",
 ] as const;
 
+export function resolvePciSupplementalQueryLimit(value = process.env.PCI_SUPPLEMENTAL_QUERY_LIMIT): number {
+  const configured = Number(value?.trim() || SUPPLEMENTAL_CATALOG_QUERIES.length);
+  return Math.min(Math.max(configured, 0), SUPPLEMENTAL_CATALOG_QUERIES.length);
+}
+
+export function resolvePciSanityLimit(value = process.env.PCI_SANITY_MAX_ITEMS): number {
+  const configured = Number(value?.trim() || 2500);
+  return Math.min(Math.max(configured, 100), 10_000);
+}
+
 export interface CollectionSummary {
   found: number;
   normalized: number;
@@ -246,7 +256,7 @@ export async function runPciCollection(options: { client?: SupabaseClient; provi
   try {
     const broadCatalog = await provider.list();
     const broadStats = provider.lastCallStats;
-    const supplementalLimit = Math.min(Math.max(Number(process.env.PCI_SUPPLEMENTAL_QUERY_LIMIT ?? SUPPLEMENTAL_CATALOG_QUERIES.length), 0), SUPPLEMENTAL_CATALOG_QUERIES.length);
+    const supplementalLimit = resolvePciSupplementalQueryLimit();
     const collected = [...broadCatalog];
     let received = broadStats.received;
     let normalized = broadStats.normalized;
@@ -266,7 +276,7 @@ export async function runPciCollection(options: { client?: SupabaseClient; provi
     }
     const contests = deduplicateContests(collected);
     const stats = { received, normalized, discarded, unique: contests.length };
-    const sanityLimit = Math.min(Math.max(Number(process.env.PCI_SANITY_MAX_ITEMS ?? 2500), 100), 10_000);
+    const sanityLimit = resolvePciSanityLimit();
     if (stats.received > sanityLimit) throw Object.assign(new Error(`O PCI retornou ${stats.received} itens; limite de segurança: ${sanityLimit}.`), { code: "SANITY_LIMIT" });
     await heartbeatCollectorRun(client, lease);
     const persisted = await persistCatalog(client, contests);
