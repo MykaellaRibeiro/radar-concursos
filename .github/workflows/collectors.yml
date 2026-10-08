@@ -9,6 +9,16 @@ on:
         required: true
         default: pci
         options: [pci, predicted, documents]
+      document_batch_size:
+        description: Number of contests in the document batch (maximum 50)
+        type: string
+        required: false
+        default: "5"
+      document_offset:
+        description: Zero-based catalog offset for the document batch
+        type: string
+        required: false
+        default: "0"
   schedule:
     - cron: "17 5,13,21 * * *"
     - cron: "37 9 * * *"
@@ -71,8 +81,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run collect:documents -- --max-concursos=5 --max-files-per-contest=5 --concurrency=1
+      - run: npm run collect:documents -- --max-concursos="$DOCUMENT_BATCH_SIZE" --contest-offset="$DOCUMENT_OFFSET" --max-files-per-contest=5 --concurrency=1
         env:
+          DOCUMENT_BATCH_SIZE: ${{ github.event_name == 'schedule' && '10' || inputs.document_batch_size || '5' }}
+          DOCUMENT_OFFSET: ${{ inputs.document_offset || '0' }}
+          ROTATE_DOCUMENT_CATALOG: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ENABLE_DOCUMENT_COLLECTOR: ${{ vars.ENABLE_DOCUMENT_COLLECTOR }}

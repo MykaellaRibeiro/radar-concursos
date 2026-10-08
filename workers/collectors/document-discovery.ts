@@ -24,6 +24,8 @@ export type CatalogContest = {
 
 export interface DocumentDiscoveryReport {
   candidates: DocumentCandidate[];
+  catalogTotal: number;
+  catalogOffset: number;
   contestsSearched: number;
   resultsFound: number;
   rejected: number;
@@ -254,7 +256,7 @@ async function loadCatalog(client: SupabaseClient): Promise<CatalogContest[]> {
 
 function priority(contest: CatalogContest) {
   const bank = BANKING_PATTERN.test(`${contest.organization} ${contest.organizationAcronym ?? ""} ${contest.title}`) ? 0 : 1;
-  return [bank, contest.proofCount, contest.organization, contest.title] as const;
+  return [bank, contest.organization, contest.title, contest.slug] as const;
 }
 
 function compareContests(left: CatalogContest, right: CatalogContest) {
@@ -267,13 +269,37 @@ function compareContests(left: CatalogContest, right: CatalogContest) {
   return 0;
 }
 
+export function selectCatalogBatch(catalog: CatalogContest[], offset: number, maxContests: number) {
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.trunc(offset)) : 0;
+  const safeLimit = Number.isFinite(maxContests) ? Math.max(1, Math.trunc(maxContests)) : 1;
+  return [...catalog].sort(compareContests).slice(safeOffset, safeOffset + safeLimit);
+}
+
+export function rotatingCatalogOffset(catalogTotal: number, maxContests: number, cycle: number) {
+  if (catalogTotal <= 0) return 0;
+  const safeLimit = Number.isFinite(maxContests) ? Math.max(1, Math.trunc(maxContests)) : 1;
+  const batches = Math.ceil(catalogTotal / safeLimit);
+  const safeCycle = Number.isFinite(cycle) ? Math.max(0, Math.trunc(cycle)) : 0;
+  return (safeCycle % batches) * safeLimit;
+}
+
 export async function discoverCatalogDocuments(input: {
   client: SupabaseClient;
   searchProvider: SearchProvider;
   maxContests: number;
   maxFilesPerContest: number;
+  contestOffset?: number;
+  rotateCatalog?: boolean;
+  rotationCycle?: number;
 }): Promise<DocumentDiscoveryReport> {
-  const catalog = (await loadCatalog(input.client)).sort(compareContests).slice(0, input.maxContests);
+  const fullCatalog = await loadCatalog(input.client);
+  const weeklyCycle = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+  const catalogOffset = input.rotateCatalog
+    ? rotatingCatalogOffset(fullCatalog.length, input.maxContests, input.rotationCycle ?? weeklyCycle)
+    : Number.isFinite(input.contestOffset)
+      ? Math.max(0, Math.trunc(input.contestOffset ?? 0))
+      : 0;
+  const catalog = selectCatalogBatch(fullCatalog, catalogOffset, input.maxContests);
   const provider = new DocumentSearchProvider(input.searchProvider);
   const candidates: DocumentCandidate[] = [];
   const errors: Array<{ key: string; message: string }> = [];
@@ -311,5 +337,13 @@ export async function discoverCatalogDocuments(input: {
 
   const paired = pairAnswerKeys(candidates);
   rejected += candidates.length - paired.length;
-  return { candidates: paired, contestsSearched: catalog.length, resultsFound, rejected, errors };
+  return {
+    candidates: paired,
+    catalogTotal: fullCatalog.length,
+    catalogOffset,
+    contestsSearched: catalog.length,
+    resultsFound,
+    rejected,
+    errors,
+  };
 }

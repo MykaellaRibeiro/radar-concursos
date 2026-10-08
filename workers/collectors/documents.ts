@@ -19,6 +19,8 @@ const BUCKET = "radar-documentos";
 export interface DocumentCollectionOptions {
   dryRun?: boolean;
   maxConcursos?: number;
+  contestOffset?: number;
+  rotateCatalog?: boolean;
   maxFilesPerContest?: number;
   maxFileSize?: number;
   timeoutMs?: number;
@@ -31,6 +33,8 @@ export interface DocumentCollectionSummary {
   dryRun: boolean;
   found: number;
   discoveredByExa: number;
+  discoveryCatalogTotal: number;
+  discoveryCatalogOffset: number;
   discoveryContestsSearched: number;
   discoveryResultsFound: number;
   discoveryRejected: number;
@@ -97,6 +101,8 @@ function pilotDiscovery(options: DocumentCollectionOptions): DocumentDiscoveryRe
   const candidates = limitedCandidates(options);
   return {
     candidates,
+    catalogTotal: new Set(documentPilotCandidates.map((item) => item.contestSlug)).size,
+    catalogOffset: 0,
     contestsSearched: new Set(candidates.map((item) => item.contestSlug)).size,
     resultsFound: candidates.length,
     rejected: 0,
@@ -402,8 +408,10 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
     return discoverCatalogDocuments({
       client: this.client,
       searchProvider: this.searchProvider,
-      maxContests: Math.min(Math.max(options.maxConcursos ?? 5, 1), 10),
+      maxContests: Math.min(Math.max(options.maxConcursos ?? 5, 1), 50),
       maxFilesPerContest: Math.min(Math.max(options.maxFilesPerContest ?? 5, 1), 10),
+      contestOffset: Math.max(options.contestOffset ?? 0, 0),
+      rotateCatalog: options.rotateCatalog,
     });
   }
 
@@ -419,7 +427,8 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
     const collectionId = start?.state === "acquired" ? start.lease.runId : null;
     const summary: DocumentCollectionSummary = {
       provider: "document_collector", dryRun: Boolean(options.dryRun), found: 0,
-      discoveredByExa: 0, discoveryContestsSearched: 0, discoveryResultsFound: 0,
+      discoveredByExa: 0, discoveryCatalogTotal: 0, discoveryCatalogOffset: 0,
+      discoveryContestsSearched: 0, discoveryResultsFound: 0,
       discoveryRejected: 0, downloaded: 0,
       uploaded: 0, duplicateFiles: 0, editaisCreated: 0, provasCreated: 0, gabaritosCreated: 0,
       resultadosCreated: 0, cutoffsCreated: 0,
@@ -437,6 +446,8 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
     const candidates = discovery.candidates;
     summary.found = candidates.length;
     summary.discoveredByExa = discoveryEnabled(options) ? candidates.length : 0;
+    summary.discoveryCatalogTotal = discovery.catalogTotal;
+    summary.discoveryCatalogOffset = discovery.catalogOffset;
     summary.discoveryContestsSearched = discovery.contestsSearched;
     summary.discoveryResultsFound = discovery.resultsFound;
     summary.discoveryRejected = discovery.rejected;
@@ -494,6 +505,7 @@ export class DocumentCollector implements Collector<DocumentCollectionSummary> {
           bucket: BUCKET, downloaded: summary.downloaded, uploaded: summary.uploaded, duplicates: summary.duplicateFiles,
           extracted: summary.extracted, partial: summary.partial, scanned: summary.scanned, failed: summary.failed,
           discoveredByExa: summary.discoveredByExa, discoveryContestsSearched: summary.discoveryContestsSearched,
+          discoveryCatalogTotal: summary.discoveryCatalogTotal, discoveryCatalogOffset: summary.discoveryCatalogOffset,
           discoveryResultsFound: summary.discoveryResultsFound, discoveryRejected: summary.discoveryRejected,
           resultadosCreated: summary.resultadosCreated, cutoffsCreated: summary.cutoffsCreated,
         },

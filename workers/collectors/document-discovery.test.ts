@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SearchResult } from "../../src/lib/providers/search/types";
-import { resultToDocumentCandidate, type CatalogContest } from "./document-discovery";
+import {
+  resultToDocumentCandidate,
+  rotatingCatalogOffset,
+  selectCatalogBatch,
+  type CatalogContest,
+} from "./document-discovery";
 
 const contest: CatalogContest = {
   id: "contest-1",
@@ -34,6 +39,23 @@ function result(overrides: Partial<SearchResult> = {}): SearchResult {
 }
 
 describe("document discovery", () => {
+  it("seleciona lotes diferentes sem perder a prioridade bancária", () => {
+    const caixa = { ...contest, id: "contest-2", slug: "caixa-2024", organization: "Caixa Econômica Federal", title: "Caixa 2024" };
+    const tribunal = { ...contest, id: "contest-3", slug: "trt-2024", organization: "Tribunal Regional do Trabalho", title: "TRT 2024" };
+
+    expect(selectCatalogBatch([tribunal, caixa, contest], 0, 2).map((item) => item.slug)).toEqual([
+      contest.slug,
+      caixa.slug,
+    ]);
+    expect(selectCatalogBatch([tribunal, caixa, contest], 2, 2).map((item) => item.slug)).toEqual([tribunal.slug]);
+  });
+
+  it("rotaciona o lote semanal por todo o catálogo", () => {
+    expect(rotatingCatalogOffset(519, 10, 0)).toBe(0);
+    expect(rotatingCatalogOffset(519, 10, 51)).toBe(510);
+    expect(rotatingCatalogOffset(519, 10, 52)).toBe(0);
+  });
+
   it("aceita prova PDF da banca quando o órgão está identificado", () => {
     const candidate = resultToDocumentCandidate(result(), contest);
     expect(candidate).toMatchObject({ kind: "PROVA", contestSlug: contest.slug });
