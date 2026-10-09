@@ -10,6 +10,14 @@ function positiveNumberFlag(name: string, fallback: number, maximum: number): nu
   return value;
 }
 
+function nonNegativeNumberFlag(name: string, fallback: number): number {
+  const argument = process.argv.find((value) => value.startsWith(`--${name}=`));
+  if (!argument) return fallback;
+  const value = Number(argument.split("=", 2)[1]);
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Valor inválido para --${name}.`);
+  return value;
+}
+
 function addSummary(total: DocumentCollectionSummary, batch: DocumentCollectionSummary) {
   const additive: Array<keyof DocumentCollectionSummary> = [
     "found", "discoveredByExa", "discoveryContestsSearched", "discoveryResultsFound", "discoveryRejected",
@@ -28,7 +36,8 @@ async function main() {
   const batchSize = positiveNumberFlag("batch-size", 50, 50);
   const maxFileSize = positiveNumberFlag("max-file-size", 15 * 1024 * 1024, 50 * 1024 * 1024);
   const timeoutMs = positiveNumberFlag("timeout", 20_000, 120_000);
-  let offset = 0;
+  const startOffset = nonNegativeNumberFlag("start-offset", 0);
+  let offset = startOffset;
   let totalCatalog = Number.POSITIVE_INFINITY;
   let aggregate: DocumentCollectionSummary | null = null;
   let batches = 0;
@@ -46,7 +55,7 @@ async function main() {
     if (batch.outcome !== "completed") throw new Error(`Coleta indisponível: ${batch.outcome}.`);
     console.info(JSON.stringify({ event: "document_backfill.batch", batch: batches + 1, offset, ...batch }, null, 2));
 
-    if (!aggregate) aggregate = { ...batch, errors: [...batch.errors], discoveryCatalogOffset: 0 };
+    if (!aggregate) aggregate = { ...batch, errors: [...batch.errors], discoveryCatalogOffset: startOffset };
     else addSummary(aggregate, batch);
     batches += 1;
     totalCatalog = batch.discoveryCatalogTotal;

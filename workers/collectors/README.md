@@ -36,4 +36,10 @@ Backfill the complete catalog in internal batches of 50:
 npm run backfill:documents -- --batch-size=50
 ```
 
+Resume an interrupted backfill from a catalog offset:
+
+```bash
+npm run backfill:documents -- --batch-size=50 --start-offset=300
+```
+
 Server variables: `EXA_MCP_URL`, `EXA_API_KEY` (recommended for predicted contests), `SERPER_API_KEY` (recommended for document discovery), `DOCUMENT_SEARCH_PROVIDER`, `DISCOVERY_RESULTS_PER_QUERY`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. Provider and service-role keys must never use the `NEXT_PUBLIC_` prefix.

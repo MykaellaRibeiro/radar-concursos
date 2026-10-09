@@ -1,9 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { once } from "node:events";
+import { createHash } from "node:crypto";
 import { assertSafeDocumentUrl } from "./url-safety";
 import type { DownloadedDocument } from "./types";
 
@@ -28,10 +23,6 @@ function filenameFromHeaders(response: Response, url: URL): string | null {
   return candidate?.slice(0, 240) || null;
 }
 
-async function writeChunk(stream: ReturnType<typeof createWriteStream>, chunk: Uint8Array) {
-  if (!stream.write(chunk)) await once(stream, "drain");
-}
-
 export async function downloadPdf(
   sourceUrl: string,
   options: { timeoutMs?: number; maxBytes?: number; retries?: number; maxRedirects?: number } = {},
@@ -43,7 +34,6 @@ export async function downloadPdf(
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
-    const temporaryPath = join(tmpdir(), `radar-document-${randomUUID()}.pdf`);
     try {
       let currentUrl = await assertSafeDocumentUrl(sourceUrl);
       let response: Response | null = null;
@@ -76,9 +66,9 @@ export async function downloadPdf(
       const declaredType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
       if (!isAcceptedPdfContentType(declaredType)) throw new Error(`MIME não permitido: ${declaredType}.`);
 
-      const stream = createWriteStream(temporaryPath, { flags: "wx" });
       const reader = response.body.getReader();
       const hash = createHash("sha256");
+      const chunks: Buffer[] = [];
       let size = 0;
       let signature = Buffer.alloc(0);
       try {
@@ -89,16 +79,14 @@ export async function downloadPdf(
           if (size > maxBytes) throw new Error("PDF excede o limite de tamanho configurado.");
           if (signature.length < PDF_SIGNATURE.length) signature = Buffer.concat([signature, Buffer.from(value)]).subarray(0, PDF_SIGNATURE.length);
           hash.update(value);
-          await writeChunk(stream, value);
+          chunks.push(Buffer.from(value));
         }
-        stream.end();
-        await once(stream, "close");
       } catch (error) {
-        stream.destroy();
+        await reader.cancel().catch(() => undefined);
         throw error;
       }
       if (!hasPdfSignature(signature)) throw new Error("Assinatura de PDF ausente ou inválida.");
-      const buffer = await readFile(temporaryPath);
+      const buffer = Buffer.concat(chunks, size);
       return {
         buffer,
         sha256: hash.digest("hex"),
@@ -113,8 +101,6 @@ export async function downloadPdf(
     } catch (error) {
       lastError = error;
       if (attempt <= retries) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
-    } finally {
-      await rm(temporaryPath, { force: true }).catch(() => undefined);
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { hasPdfSignature, isAcceptedPdfContentType } from "./downloader";
+import { describe, expect, it, vi } from "vitest";
+import { downloadPdf, hasPdfSignature, isAcceptedPdfContentType } from "./downloader";
 import { sha256Buffer } from "./hash";
 import { isConfidentContestMatch, normalizeDocumentLabel } from "./matching";
 import { extractPdfText, normalizeExtractedText } from "./pdf";
@@ -32,6 +32,35 @@ describe("download validation", () => {
     expect(isAcceptedPdfContentType("text/html")).toBe(false);
     expect(hasPdfSignature(Buffer.from("%PDF-1.7"))).toBe(true);
     expect(hasPdfSignature(Buffer.from("<html>"))).toBe(false);
+  });
+
+  it("downloads a streamed PDF without using a temporary file stream", async () => {
+    const body = Buffer.from("%PDF-1.7\nradar");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/pdf" },
+    })));
+    try {
+      const document = await downloadPdf("https://93.184.216.34/prova.pdf", { retries: 0 });
+      expect(document.buffer).toEqual(body);
+      expect(document.size).toBe(body.length);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("cancels an oversized response without emitting a destroyed-stream error", async () => {
+    const body = Buffer.from("%PDF-1.7\nconteudo acima do limite");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/pdf" },
+    })));
+    try {
+      await expect(downloadPdf("https://93.184.216.34/prova.pdf", { maxBytes: 8, retries: 0 }))
+        .rejects.toThrow(/excede o limite/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each(["127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "::1", "fd00::1"])("blocks reserved address %s", (address) => {
