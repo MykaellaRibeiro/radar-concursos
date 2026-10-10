@@ -23,6 +23,7 @@ export interface ContestSeed {
   officialUrl: string;
   provider: "document_collector";
   externalId: string;
+  organizationType?: "POLICIA_CIVIL" | "POLICIA_MILITAR" | "TRIBUNAL" | "PREFEITURA" | "SECRETARIA" | "UNIVERSIDADE" | "AUTARQUIA" | "MINISTERIO_PUBLICO" | "DEFENSORIA" | "OUTRO";
 }
 
 export interface DocumentCandidate {

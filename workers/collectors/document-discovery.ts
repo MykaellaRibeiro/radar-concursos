@@ -122,7 +122,7 @@ function classifyDocument(result: SearchResult): { kind: DocumentKind; semanticT
   if (/\b(?:gabarito|respostas? definitivas?)\b/.test(text)) {
     return { kind: "GABARITO", semanticType: /preliminar/.test(text) ? "PRELIMINAR" : /retificad/.test(text) ? "RETIFICADO" : "DEFINITIVO" };
   }
-  if (/\b(?:resultado final|classificacao final|lista (?:final )?de classificados|nota (?:minima )?(?:de )?corte)\b/.test(text)) {
+  if (/\b(?:resultado(?:\s+(?:final|preliminar|definitivo))?|classificacao final|lista (?:final )?de classificados|nota (?:minima )?(?:de )?corte)\b/.test(text)) {
     return { kind: "RESULTADO", semanticType: /preliminar/.test(text) ? "PRELIMINAR" : "DEFINITIVO" };
   }
   if (/\b(?:concorrencia|demanda de candidatos|candidatos por vaga)\b/.test(text)) return { kind: "CONCORRENCIA", semanticType: "DEMANDA" };

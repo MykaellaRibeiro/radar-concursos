@@ -11,6 +11,7 @@ const pcmaSeed = {
   officialUrl: "https://conhecimento.fgv.br/concursos/maranhao12/policia-civil",
   provider: "document_collector" as const,
   externalId: "fgv-maranhao12-policia-civil",
+  organizationType: "POLICIA_CIVIL" as const,
 };
 
 const fgv = {
@@ -19,6 +20,42 @@ const fgv = {
   type: "EXAM_BOARD" as const,
   official: true,
   reliabilityScore: 0.99,
+};
+
+const cesgranrio = {
+  name: "Fundação Cesgranrio",
+  domain: "concursos.cesgranrio.org.br",
+  type: "EXAM_BOARD" as const,
+  official: true,
+  reliabilityScore: 0.99,
+};
+
+const basaSeed = {
+  slug: "banco-da-amazonia-2024",
+  title: "Banco da Amazônia — Técnico Bancário 2024",
+  organization: "Banco da Amazônia S.A.",
+  organizationSlug: "banco-da-amazonia",
+  organizationAcronym: "BASA",
+  organizationType: "OUTRO" as const,
+  state: "PA",
+  status: "ENCERRADO" as const,
+  officialUrl: "https://www.bancoamazonia.com.br/",
+  provider: "document_collector" as const,
+  externalId: "cesgranrio-basa-2024",
+};
+
+const bnbSeed = {
+  slug: "banco-do-nordeste-2024",
+  title: "Banco do Nordeste — Analista Bancário 2024",
+  organization: "Banco do Nordeste do Brasil S.A.",
+  organizationSlug: "banco-do-nordeste-do-brasil",
+  organizationAcronym: "BNB",
+  organizationType: "OUTRO" as const,
+  state: "CE",
+  status: "ENCERRADO" as const,
+  officialUrl: "https://www.bnb.gov.br/",
+  provider: "document_collector" as const,
+  externalId: "cesgranrio-bnb-2024",
 };
 
 export const documentPilotCandidates: DocumentCandidate[] = [
@@ -81,5 +118,75 @@ export const documentPilotCandidates: DocumentCandidate[] = [
     publishedAt: "2012-12-19T00:00:00-03:00",
     source: fgv,
     relatedProofKey: "pcma-2012-investigador-prova-tipo-1",
+  },
+  {
+    key: "basa-2024-tecnico-bancario-prova-gabarito-3",
+    contestSlug: basaSeed.slug,
+    contestSeed: basaSeed,
+    kind: "PROVA",
+    semanticType: "OBJETIVA_GABARITO_3",
+    title: "Prova A — Técnico Bancário — Gabarito 3",
+    sourceUrl: "https://concursos.cesgranrio.org.br/media/gpoweb-prd-hibrido3/eventos/13/conteudos/b91c284e-5f3e-4275-9531-82b42404b0b3.pdf?se=2035-07-13T07%3A16%3A05Z&sig=SxWMpnHmIXRQaMfbAnSMRen4%2Fa%2FOqWGF6y%2BxFO%2FEEPg%3D&sp=r&sr=c&sv=2025-01-05",
+    discoveryUrl: "https://concursos.cesgranrio.org.br/",
+    publishedAt: "2024-10-20T00:00:00-03:00",
+    source: cesgranrio,
+    exam: {
+      year: 2024,
+      boardName: "Fundação Cesgranrio",
+      boardAcronym: "Cesgranrio",
+      boardSlug: "cesgranrio",
+      boardSite: "https://www.cesgranrio.org.br/",
+      role: "Técnico Bancário",
+      shift: null,
+      questionCount: 70,
+    },
+  },
+  {
+    key: "basa-2024-tecnico-bancario-gabarito-final",
+    contestSlug: basaSeed.slug,
+    contestSeed: basaSeed,
+    kind: "GABARITO",
+    semanticType: "DEFINITIVO",
+    title: "Gabarito final — Técnico Bancário",
+    sourceUrl: "https://concursos.cesgranrio.org.br/media/gpoweb-prd-hibrido3/eventos/13/conteudos/8fc275f8-f089-4c77-b759-9cb70f06a0ee.pdf?se=2035-06-11T02%3A52%3A47Z&sig=ftg3ilaolf0d63DsrGvmv9alKC9na7BsPMi7DW1uXBw%3D&sp=r&sr=c&sv=2025-01-05",
+    discoveryUrl: "https://concursos.cesgranrio.org.br/",
+    publishedAt: null,
+    source: cesgranrio,
+    relatedProofKey: "basa-2024-tecnico-bancario-prova-gabarito-3",
+  },
+  {
+    key: "bnb-2024-analista-bancario-prova-gabarito-1",
+    contestSlug: bnbSeed.slug,
+    contestSeed: bnbSeed,
+    kind: "PROVA",
+    semanticType: "OBJETIVA_GABARITO_1",
+    title: "Prova — Analista Bancário 1 — Gabarito 1",
+    sourceUrl: "https://concursos.cesgranrio.org.br/media/gpoweb-prd-hibrido3/eventos/10/conteudos/7b7f12ab-bece-4cfd-b0af-f8e70d776203.pdf?se=2035-05-29T03%3A05%3A10Z&sig=K57pmT8%2FNXLM71mhtCOdqANOMYSn7opauGwI%2BxJ7XaI%3D&sp=r&sr=c&sv=2025-01-05",
+    discoveryUrl: "https://concursos.cesgranrio.org.br/",
+    publishedAt: "2024-04-28T00:00:00-03:00",
+    source: cesgranrio,
+    exam: {
+      year: 2024,
+      boardName: "Fundação Cesgranrio",
+      boardAcronym: "Cesgranrio",
+      boardSlug: "cesgranrio",
+      boardSite: "https://www.cesgranrio.org.br/",
+      role: "Analista Bancário 1",
+      shift: null,
+      questionCount: 60,
+    },
+  },
+  {
+    key: "bnb-2024-analista-bancario-gabarito-final",
+    contestSlug: bnbSeed.slug,
+    contestSeed: bnbSeed,
+    kind: "GABARITO",
+    semanticType: "DEFINITIVO",
+    title: "Gabarito final — Analista Bancário 1",
+    sourceUrl: "https://concursos.cesgranrio.org.br/media/gpoweb-prd-hibrido3/eventos/10/conteudos/a85913e1-e12d-45f7-8f93-687fa6941183.pdf?se=2034-04-30T16%3A44%3A15Z&sig=QspcIHVSb4G8rHCD7EMOjI8iociHkzf94ta2gjN248g%3D&sp=r&sr=c&sv=2021-08-06",
+    discoveryUrl: "https://concursos.cesgranrio.org.br/",
+    publishedAt: null,
+    source: cesgranrio,
+    relatedProofKey: "bnb-2024-analista-bancario-prova-gabarito-1",
   },
 ];

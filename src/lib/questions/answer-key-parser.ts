@@ -1,6 +1,7 @@
 import type { AlternativeLetter, ParsedAnswer } from "./types";
 
 export const ANSWER_KEY_PARSER_VERSION = "fgv-answer-key-v1.0.0";
+export const CESGRANRIO_ANSWER_KEY_PARSER_VERSION = "cesgranrio-answer-key-v1.0.0";
 
 function typeBlock(text: string, typeNumber: number): string {
   const normalized = text.replace(/\r\n?/g, "\n");
@@ -17,6 +18,33 @@ export function parseFgvAnswerKey(text: string, typeNumber: number, expectedQues
   const block = typeBlock(text, typeNumber);
   const answers = new Map<number, ParsedAnswer>();
   const pattern = /(?:^|\n)(\d{1,2})\s*[–—-]\s*([A-E*])\s*(?=\n|$)/g;
+
+  for (const match of block.matchAll(pattern)) {
+    const number = Number(match[1]);
+    if (number < 1 || (expectedQuestions && number > expectedQuestions)) continue;
+    const token = match[2];
+    answers.set(number, {
+      number,
+      answer: token === "*" ? null : token as AlternativeLetter,
+      annulled: token === "*",
+    });
+  }
+
+  return [...answers.values()].sort((left, right) => left.number - right.number);
+}
+
+export function parseCesgranrioAnswerKey(text: string, gabaritoNumber: number, expectedQuestions?: number): ParsedAnswer[] {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const headings = [...normalized.matchAll(/GABARITO\s+(\d+)\b/gi)].map((match) => ({
+    number: Number(match[1]),
+    index: match.index,
+  }));
+  const startHeading = headings.find((heading) => heading.number === gabaritoNumber);
+  if (!startHeading) throw new Error(`Bloco do gabarito ${gabaritoNumber} não encontrado.`);
+  const nextHeading = headings.find((heading) => heading.index > startHeading.index && heading.number !== gabaritoNumber);
+  const block = normalized.slice(startHeading.index, nextHeading?.index ?? normalized.length);
+  const answers = new Map<number, ParsedAnswer>();
+  const pattern = /(?:^|\s)(\d{1,3})\s*-\s*([A-E*])(?=\s|$)/g;
 
   for (const match of block.matchAll(pattern)) {
     const number = Number(match[1]);

@@ -16,6 +16,13 @@ function nonNegativeNumberFlag(name: string, fallback: number): number {
   return value;
 }
 
+function listFlag(name: string): string[] | undefined {
+  const argument = process.argv.find((value) => value.startsWith(`--${name}=`));
+  if (!argument) return undefined;
+  const values = argument.slice(name.length + 3).split(",").map((value) => value.trim()).filter(Boolean);
+  return values.length ? values : undefined;
+}
+
 async function main() {
   const summary = await runDocumentCollection({
     dryRun: process.argv.includes("--dry-run"),
@@ -27,6 +34,7 @@ async function main() {
     timeoutMs: numberFlag("timeout", 20_000),
     concurrency: numberFlag("concurrency", 1),
     discovery: process.argv.includes("--pilot-only") ? false : undefined,
+    pilotContestSlugs: listFlag("pilot-contests"),
   });
 
   console.info(JSON.stringify(summary, null, 2));

@@ -34,6 +34,7 @@ export interface DocumentCollectionOptions {
   timeoutMs?: number;
   concurrency?: number;
   discovery?: boolean;
+  pilotContestSlugs?: string[];
 }
 
 export interface DocumentCollectionSummary {
@@ -89,9 +90,13 @@ function movementFingerprint(contestId: string, candidate: DocumentCandidate, sh
 function limitedCandidates(options: DocumentCollectionOptions): DocumentCandidate[] {
   const maxContests = Math.min(Math.max(options.maxConcursos ?? 5, 1), 10);
   const maxFiles = Math.min(Math.max(options.maxFilesPerContest ?? 5, 1), 10);
-  const selectedContests = [...new Set(documentPilotCandidates.map((item) => item.contestSlug))].slice(0, maxContests);
+  const allowed = options.pilotContestSlugs?.length ? new Set(options.pilotContestSlugs) : null;
+  const eligibleCandidates = allowed
+    ? documentPilotCandidates.filter((item) => allowed.has(item.contestSlug))
+    : documentPilotCandidates;
+  const selectedContests = [...new Set(eligibleCandidates.map((item) => item.contestSlug))].slice(0, maxContests);
   const counts = new Map<string, number>();
-  return documentPilotCandidates.filter((item) => {
+  return eligibleCandidates.filter((item) => {
     if (!selectedContests.includes(item.contestSlug)) return false;
     const count = counts.get(item.contestSlug) ?? 0;
     if (count >= maxFiles) return false;
@@ -109,7 +114,7 @@ function pilotDiscovery(options: DocumentCollectionOptions): DocumentDiscoveryRe
   const candidates = limitedCandidates(options);
   return {
     candidates,
-    catalogTotal: new Set(documentPilotCandidates.map((item) => item.contestSlug)).size,
+    catalogTotal: new Set(candidates.map((item) => item.contestSlug)).size,
     catalogOffset: 0,
     contestsSearched: new Set(candidates.map((item) => item.contestSlug)).size,
     resultsFound: candidates.length,
@@ -128,7 +133,7 @@ async function ensureContest(client: SupabaseClient, slug: string, seed?: Contes
     nome: seed.organization,
     sigla: seed.organizationAcronym,
     slug: seed.organizationSlug,
-    tipo: "POLICIA_CIVIL",
+    tipo: seed.organizationType ?? "OUTRO",
     uf: seed.state,
     site_oficial: seed.officialUrl,
   }, { onConflict: "slug" }).select("id").single();

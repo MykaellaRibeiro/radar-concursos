@@ -1,19 +1,29 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { PDFParse } from "pdf-parse";
 import { normalizeExtractedText } from "../../src/lib/documents/pdf";
-import { ANSWER_KEY_PARSER_VERSION, parseFgvAnswerKey } from "../../src/lib/questions/answer-key-parser";
-import { QUESTION_CLASSIFIER_VERSION, RuleBasedQuestionClassifier } from "../../src/lib/questions/classifier";
-import { EXAM_PARSER_VERSION, parseFgvObjectiveExam } from "../../src/lib/questions/parser";
 import {
-  PCMA_2012_ANSWER_KEY_TYPE,
-  PCMA_2012_DISCIPLINE_RANGES,
-  PCMA_2012_EXPECTED_QUESTIONS,
-  PCMA_2012_PROOF_ID,
-  PCMA_2012_SUBJECTS,
-  PCMA_2012_SUBSUBJECTS,
-  pcmaDisciplineForQuestion,
-} from "../../src/lib/questions/pcma-2012";
-import type { ExamPage, QuestionClassification } from "../../src/lib/questions/types";
+  ANSWER_KEY_PARSER_VERSION,
+  CESGRANRIO_ANSWER_KEY_PARSER_VERSION,
+  parseCesgranrioAnswerKey,
+  parseFgvAnswerKey,
+} from "../../src/lib/questions/answer-key-parser";
+import { QUESTION_CLASSIFIER_VERSION, RuleBasedQuestionClassifier } from "../../src/lib/questions/classifier";
+import {
+  CESGRANRIO_EXAM_PARSER_VERSION,
+  EXAM_PARSER_VERSION,
+  parseCesgranrioObjectiveExam,
+  parseFgvObjectiveExam,
+} from "../../src/lib/questions/parser";
+import {
+  disciplineForQuestion,
+  examIngestionProfiles,
+  resolveExamIngestionProfile,
+  type ExamIngestionProfile,
+} from "../../src/lib/questions/exam-profiles";
+import { PCMA_2012_PROOF_ID } from "../../src/lib/questions/pcma-2012";
+import type { ExamPage, ParsedAnswer, ParsedQuestion, QuestionClassification } from "../../src/lib/questions/types";
+
+const INGESTION_PIPELINE_VERSION = "multi-board-v2.0.0";
 
 export interface ExamIngestionOptions {
   proofId?: string;
@@ -54,6 +64,8 @@ export interface ExamIngestionSummary {
 
 type ProofRow = {
   id: string;
+  concurso_slug: string | null;
+  banca_slug: string | null;
   titulo: string;
   tipo: string | null;
   quantidade_questoes: number | null;
@@ -108,8 +120,8 @@ async function extractPages(buffer: Buffer): Promise<ExamPage[]> {
 }
 
 async function loadProofs(client: SupabaseClient, options: ExamIngestionOptions): Promise<ProofRow[]> {
-  let query = client.from("provas")
-    .select("id,titulo,tipo,quantidade_questoes,storage_bucket,storage_path,sha256")
+  let query = client.from("prova_catalog")
+    .select("id,concurso_slug,banca_slug,titulo,tipo,quantidade_questoes,storage_bucket,storage_path,sha256")
     .order("created_at");
   if (options.allUnprocessed) {
     const processed = await client.from("questao_ingestoes")
@@ -123,7 +135,9 @@ async function loadProofs(client: SupabaseClient, options: ExamIngestionOptions)
   }
   const { data, error } = await query;
   if (error) throw error;
-  return data as ProofRow[];
+  const proofs = data as ProofRow[];
+  if (!options.allUnprocessed) return proofs;
+  return proofs.filter((proof) => examIngestionProfiles.some((profile) => profile.matches(proof)));
 }
 
 async function loadAnswerKey(client: SupabaseClient, proofId: string): Promise<AnswerKeyRow> {
@@ -140,22 +154,22 @@ async function loadAnswerKey(client: SupabaseClient, proofId: string): Promise<A
   return selected;
 }
 
-async function ensureTaxonomy(client: SupabaseClient): Promise<TaxonomyIds> {
+async function ensureTaxonomy(client: SupabaseClient, profile: ExamIngestionProfile): Promise<TaxonomyIds> {
   const disciplines = new Map<string, string>();
   const subjects = new Map<string, string>();
   const subsubjects = new Map<string, string>();
 
-  for (const range of PCMA_2012_DISCIPLINE_RANGES) {
+  for (const range of profile.disciplineRanges) {
     const { data, error } = await client.from("disciplinas").upsert({
       nome: range.discipline.name,
       slug: range.discipline.slug,
-      metadata: { source: "official_answer_key", pilot: "pcma-2012-investigador-tipo-1" },
+      metadata: { source: "official_answer_key", profile: profile.key },
     }, { onConflict: "slug" }).select("id").single();
     if (error) throw error;
     disciplines.set(range.discipline.slug, data.id);
   }
 
-  for (const item of PCMA_2012_SUBJECTS) {
+  for (const item of profile.subjects) {
     const disciplineId = disciplines.get(item.disciplineSlug);
     if (!disciplineId) throw new Error(`Disciplina ausente para o assunto ${item.slug}.`);
     const { data, error } = await client.from("assuntos").upsert({
@@ -168,7 +182,7 @@ async function ensureTaxonomy(client: SupabaseClient): Promise<TaxonomyIds> {
     subjects.set(item.slug, data.id);
   }
 
-  for (const item of PCMA_2012_SUBSUBJECTS) {
+  for (const item of profile.subsubjects) {
     const subjectId = subjects.get(item.subjectSlug);
     if (!subjectId) throw new Error(`Assunto ausente para o subassunto ${item.slug}.`);
     const { data, error } = await client.from("subassuntos").upsert({
@@ -184,13 +198,6 @@ async function ensureTaxonomy(client: SupabaseClient): Promise<TaxonomyIds> {
   return { disciplines, subjects, subsubjects };
 }
 
-function validatePilot(proof: ProofRow) {
-  if (proof.id !== PCMA_2012_PROOF_ID) {
-    throw new Error("O parser da Fase 5 está validado somente para a prova piloto PC-MA 2012.");
-  }
-  if (!proof.tipo?.includes("TIPO_1")) throw new Error("A prova piloto não está identificada como Tipo 1.");
-}
-
 function emptyTaxonomyIds(): TaxonomyIds {
   return { disciplines: new Map(), subjects: new Map(), subsubjects: new Map() };
 }
@@ -198,12 +205,14 @@ function emptyTaxonomyIds(): TaxonomyIds {
 function questionRow(input: {
   proof: ProofRow;
   answerKey: AnswerKeyRow;
-  question: ReturnType<typeof parseFgvObjectiveExam>[number];
-  answer: ReturnType<typeof parseFgvAnswerKey>[number];
+  question: ParsedQuestion;
+  answer: ParsedAnswer;
   classification: QuestionClassification;
   taxonomy: TaxonomyIds;
+  profile: ExamIngestionProfile;
 }) {
-  const { proof, answerKey, question, answer, classification, taxonomy } = input;
+  const { proof, answerKey, question, answer, classification, taxonomy, profile } = input;
+  const parserVersion = profile.parser === "FGV" ? EXAM_PARSER_VERSION : CESGRANRIO_EXAM_PARSER_VERSION;
   return {
     prova_id: proof.id,
     numero: question.number,
@@ -219,7 +228,7 @@ function questionRow(input: {
     anulada: answer.annulled,
     texto_bruto: question.rawText,
     parse_quality: question.parseQuality,
-    parser_version: EXAM_PARSER_VERSION,
+    parser_version: parserVersion,
     content_hash: question.contentHash,
     classification_status: classification.overallStatus,
     classification_confidence: classification.overallConfidence,
@@ -243,21 +252,58 @@ function questionRow(input: {
       answer_key_sha256: answerKey.sha256,
       discipline_source: "official_answer_key_header",
       answer_source: "official_definitive_answer_key",
-      pilot: "pcma-2012-investigador-tipo-1",
+      profile: profile.key,
     },
   };
 }
 
+function parseQuestions(profile: ExamIngestionProfile, pages: readonly ExamPage[], expectedQuestions: number) {
+  return profile.parser === "FGV"
+    ? parseFgvObjectiveExam(pages, expectedQuestions)
+    : parseCesgranrioObjectiveExam(pages, expectedQuestions);
+}
+
+function parseAnswers(profile: ExamIngestionProfile, text: string, expectedQuestions: number) {
+  return profile.parser === "FGV"
+    ? parseFgvAnswerKey(text, profile.answerKeyNumber, expectedQuestions)
+    : parseCesgranrioAnswerKey(text, profile.answerKeyNumber, expectedQuestions);
+}
+
+function classifyQuestion(profile: ExamIngestionProfile, question: ParsedQuestion): QuestionClassification {
+  const discipline = disciplineForQuestion(profile, question.number);
+  if (!discipline) throw new Error(`Faixa oficial de disciplina ausente para a questão ${question.number}.`);
+  if (profile.subjects.length) {
+    return new RuleBasedQuestionClassifier().classify(question, { discipline });
+  }
+  return {
+    discipline,
+    disciplineStatus: "CONFIRMED",
+    disciplineConfidence: "OFFICIAL",
+    subject: null,
+    subjectStatus: "UNCLASSIFIED",
+    subjectConfidence: "LOW",
+    subsubject: null,
+    subsubjectStatus: "UNCLASSIFIED",
+    subsubjectConfidence: "LOW",
+    overallStatus: question.needsReview ? "REVIEW_REQUIRED" : "CONFIRMED",
+    overallConfidence: question.needsReview ? "MEDIUM" : "OFFICIAL",
+    reason: "Disciplina vinculada pela faixa oficial do caderno e do gabarito; assunto preservado sem classificação automática.",
+  };
+}
+
 async function processProof(client: SupabaseClient, proof: ProofRow, options: ExamIngestionOptions): Promise<ExamIngestionItemSummary> {
-  validatePilot(proof);
-  const expectedQuestions = proof.quantidade_questoes ?? PCMA_2012_EXPECTED_QUESTIONS;
+  const profile = resolveExamIngestionProfile(proof);
+  const expectedQuestions = proof.quantidade_questoes ?? profile.expectedQuestions;
+  if (expectedQuestions !== profile.expectedQuestions) {
+    throw new Error(`Quantidade cadastrada (${expectedQuestions}) diverge do perfil validado (${profile.expectedQuestions}).`);
+  }
   const answerKey = await loadAnswerKey(client, proof.id);
   const [proofPages, answerKeyPages] = await Promise.all([
     downloadStoredPdf(client, proof.storage_bucket, proof.storage_path).then(extractPages),
     downloadStoredPdf(client, answerKey.storage_bucket, answerKey.storage_path).then(extractPages),
   ]);
-  const questions = parseFgvObjectiveExam(proofPages, expectedQuestions);
-  const answers = parseFgvAnswerKey(answerKeyPages.map((page) => page.text).join("\n"), PCMA_2012_ANSWER_KEY_TYPE, expectedQuestions);
+  const questions = parseQuestions(profile, proofPages, expectedQuestions);
+  const answers = parseAnswers(profile, answerKeyPages.map((page) => page.text).join("\n"), expectedQuestions);
   const errors: string[] = [];
   if (questions.length !== expectedQuestions) errors.push(`Esperadas ${expectedQuestions} questões; encontradas ${questions.length}.`);
   if (answers.length !== expectedQuestions) errors.push(`Esperadas ${expectedQuestions} respostas; encontradas ${answers.length}.`);
@@ -266,13 +312,10 @@ async function processProof(client: SupabaseClient, proof: ProofRow, options: Ex
   if (missingAnswers.length) errors.push(`Questões sem resposta vinculável: ${missingAnswers.join(", ")}.`);
   if (errors.length) throw new Error(errors.join(" "));
 
-  const classifier = new RuleBasedQuestionClassifier();
   const classified = questions.map((question) => {
-    const discipline = pcmaDisciplineForQuestion(question.number);
-    if (!discipline) throw new Error(`Faixa oficial de disciplina ausente para a questão ${question.number}.`);
-    return { question, classification: classifier.classify(question, { discipline }) };
+    return { question, classification: classifyQuestion(profile, question) };
   });
-  const taxonomy = options.dryRun ? emptyTaxonomyIds() : await ensureTaxonomy(client);
+  const taxonomy = options.dryRun ? emptyTaxonomyIds() : await ensureTaxonomy(client, profile);
   const existingResult = await client.from("questoes").select("id,numero,content_hash").eq("prova_id", proof.id);
   if (existingResult.error && existingResult.error.code !== "42703") throw existingResult.error;
   const existingByNumber = new Map((existingResult.data ?? []).map((row) => [row.numero, row]));
@@ -294,6 +337,7 @@ async function processProof(client: SupabaseClient, proof: ProofRow, options: Ex
       answer: answerByNumber.get(question.number)!,
       classification,
       taxonomy,
+      profile,
     }));
     const toWrite = options.force
       ? rows
@@ -332,8 +376,8 @@ export async function runExamIngestion(options: ExamIngestionOptions = {}): Prom
   if (!proofs.length) throw new Error("Nenhuma prova elegível encontrada.");
   const summary: ExamIngestionSummary = {
     dryRun: Boolean(options.dryRun),
-    parserVersion: EXAM_PARSER_VERSION,
-    answerKeyParserVersion: ANSWER_KEY_PARSER_VERSION,
+    parserVersion: INGESTION_PIPELINE_VERSION,
+    answerKeyParserVersion: `${ANSWER_KEY_PARSER_VERSION}+${CESGRANRIO_ANSWER_KEY_PARSER_VERSION}`,
     classifierVersion: QUESTION_CLASSIFIER_VERSION,
     proofsRequested: proofs.length,
     proofsProcessed: 0,
@@ -345,22 +389,24 @@ export async function runExamIngestion(options: ExamIngestionOptions = {}): Prom
 
   for (const proof of proofs) {
     let ingestionId: string | null = null;
-    if (!options.dryRun) {
-      const answerKey = await loadAnswerKey(client, proof.id);
-      const { data, error } = await client.from("questao_ingestoes").insert({
-        prova_id: proof.id,
-        gabarito_id: answerKey.id,
-        status: "RUNNING",
-        parser_version: EXAM_PARSER_VERSION,
-        classifier_version: QUESTION_CLASSIFIER_VERSION,
-        prova_sha256: proof.sha256,
-        gabarito_sha256: answerKey.sha256,
-        metadata: { force: Boolean(options.force), pilot: "pcma-2012-investigador-tipo-1" },
-      }).select("id").single();
-      if (error) throw error;
-      ingestionId = data.id;
-    }
     try {
+      const profile = resolveExamIngestionProfile(proof);
+      if (!options.dryRun) {
+        const answerKey = await loadAnswerKey(client, proof.id);
+        const parserVersion = profile.parser === "FGV" ? EXAM_PARSER_VERSION : CESGRANRIO_EXAM_PARSER_VERSION;
+        const { data, error } = await client.from("questao_ingestoes").insert({
+          prova_id: proof.id,
+          gabarito_id: answerKey.id,
+          status: "RUNNING",
+          parser_version: parserVersion,
+          classifier_version: QUESTION_CLASSIFIER_VERSION,
+          prova_sha256: proof.sha256,
+          gabarito_sha256: answerKey.sha256,
+          metadata: { force: Boolean(options.force), profile: profile.key },
+        }).select("id").single();
+        if (error) throw error;
+        ingestionId = data.id;
+      }
       const item = await processProof(client, proof, options);
       summary.items.push(item);
       summary.proofsProcessed += 1;

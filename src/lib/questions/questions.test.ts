@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseFgvAnswerKey } from "./answer-key-parser";
+import { parseCesgranrioAnswerKey, parseFgvAnswerKey } from "./answer-key-parser";
 import { RuleBasedQuestionClassifier } from "./classifier";
-import { parseFgvObjectiveExam } from "./parser";
+import { parseCesgranrioObjectiveExam, parseFgvObjectiveExam } from "./parser";
 import { pcmaDisciplineForQuestion } from "./pcma-2012";
 import { buildQuestionStatistics, isStatisticsEligible, MINIMUM_STATISTICS_SAMPLE } from "./statistics";
 
@@ -73,6 +73,49 @@ describe("FGV answer-key parser", () => {
       { number: 1, answer: "B", annulled: false },
       { number: 2, answer: null, annulled: true },
       { number: 3, answer: "E", annulled: false },
+    ]);
+  });
+});
+
+describe("Cesgranrio objective parser", () => {
+  it("extracts questions despite numeric layout markers and column order", () => {
+    const parsed = parseCesgranrioObjectiveExam([{
+      pageNumber: 4,
+      text: `8
+9
+10
+6
+The main purpose of the text is to
+(A) First option.
+(B) Second option.
+(C) Third option.
+(D) Fourth option.
+(E) Fifth option.
+8
+In the excerpt, the term means
+(A) Alpha.
+(B) Beta.
+(C) Gamma.
+(D) Delta.
+(E) Epsilon.`,
+    }], 8);
+
+    expect(parsed.map((question) => question.number)).toEqual([6, 8]);
+    expect(parsed[0].statement).toBe("The main purpose of the text is to");
+    expect(parsed[1].statement).toBe("In the excerpt, the term means");
+  });
+});
+
+describe("Cesgranrio answer-key parser", () => {
+  it("selects the requested gabarito and ignores the other variants", () => {
+    const text = `GABARITO 1
+1 - A 2 - B 3 - C
+GABARITO 2
+1 - D 2 - E 3 - *`;
+    expect(parseCesgranrioAnswerKey(text, 2, 3)).toEqual([
+      { number: 1, answer: "D", annulled: false },
+      { number: 2, answer: "E", annulled: false },
+      { number: 3, answer: null, annulled: true },
     ]);
   });
 });

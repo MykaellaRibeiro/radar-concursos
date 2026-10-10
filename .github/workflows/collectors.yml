@@ -8,7 +8,7 @@ on:
         type: choice
         required: true
         default: pci
-        options: [pci, predicted, documents, documents-full]
+        options: [pci, predicted, documents, documents-full, questions-banking]
       document_batch_size:
         description: Number of contests in the document batch (maximum 50)
         type: string
@@ -70,7 +70,7 @@ jobs:
           ENABLE_WEB_DISCOVERY: ${{ vars.ENABLE_WEB_DISCOVERY }}
 
   documents:
-    if: (github.event_name == 'schedule' && github.event.schedule == '47 11 * * 0') || (github.event_name == 'workflow_dispatch' && (inputs.collector == 'documents' || inputs.collector == 'documents-full'))
+    if: (github.event_name == 'schedule' && github.event.schedule == '47 11 * * 0') || (github.event_name == 'workflow_dispatch' && (inputs.collector == 'documents' || inputs.collector == 'documents-full' || inputs.collector == 'questions-banking'))
     runs-on: ubuntu-latest
     timeout-minutes: 360
     concurrency:
@@ -107,3 +107,15 @@ jobs:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           EXA_MCP_URL: ${{ vars.EXA_MCP_URL }}
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      - if: github.event_name == 'workflow_dispatch' && inputs.collector == 'questions-banking'
+        run: npm run collect:documents -- --pilot-only --pilot-contests=banco-da-amazonia-2024,banco-do-nordeste-2024 --max-concursos=2 --max-files-per-contest=2 --concurrency=1
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ENABLE_DOCUMENT_COLLECTOR: ${{ vars.ENABLE_DOCUMENT_COLLECTOR }}
+          ENABLE_DOCUMENT_DISCOVERY: "false"
+      - if: github.event_name == 'workflow_dispatch' && inputs.collector == 'questions-banking'
+        run: npm run parse:exam -- --all-unprocessed
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
