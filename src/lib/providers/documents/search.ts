@@ -16,7 +16,7 @@ export class DocumentSearchProvider {
     const queries = [
       `"${subject.organization}" (edital OR retificação) concurso filetype:pdf`,
       `${context} (prova OR "caderno de questões" OR gabarito) concurso filetype:pdf`,
-      `${context} ("resultado final" OR classificação OR "nota de corte") concurso filetype:pdf`,
+      `${context} ("resultado final" OR classificação) concurso filetype:pdf`,
       `${context} (concorrência OR demanda OR "candidatos por vaga") concurso filetype:pdf`,
     ];
     const batches = await Promise.all(queries.map((query) => this.searchProvider.search(query, {

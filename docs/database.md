@@ -7,7 +7,7 @@ O schema está em `supabase/migrations`. UUIDs são as chaves primárias. Datas 
 - Catálogo: `orgaos`, `concursos`, `cargos`, `concursos_cargos`, `bancas`, `concursos_bancas`.
 - Evidência: `fontes`, `concurso_fontes`, `movimentacoes`, `movimentacao_fontes`.
 - Documentos e estudo: `editais`, `provas`, `gabaritos`, `questoes`, `disciplinas`, `assuntos`, `subassuntos`, `arquivos`.
-- Resultados: `inscricoes`, `concorrencia`, `resultados`, `notas_corte`.
+- Resultados: `inscricoes`, `concorrencia`, `resultados`.
 - Usuário: `profiles`, `alertas`, `concursos_seguidos`, `notificacoes`.
 - Operação: `coletas`, `search_logs`, `web_discoveries`, `questao_ingestoes`.
 

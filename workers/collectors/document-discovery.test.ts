@@ -93,7 +93,7 @@ describe("document discovery", () => {
 
   it("classifica resultado oficial antes de confundi-lo com prova", () => {
     const candidate = resultToDocumentCandidate(result({
-      title: "Resultado final e nota de corte — Banco do Brasil 2023",
+      title: "Resultado final — Banco do Brasil 2023",
       snippet: "Classificação final após a prova objetiva.",
       url: "https://concursos.cesgranrio.org.br/bb-2023/resultado-final.pdf",
     }), contest);

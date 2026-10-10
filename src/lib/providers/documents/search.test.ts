@@ -3,7 +3,7 @@ import type { SearchProvider } from "../search/types";
 import { DocumentSearchProvider } from "./search";
 
 describe("DocumentSearchProvider", () => {
-  it("cobre documentos e notas de corte com quatro consultas", async () => {
+  it("cobre os documentos do concurso com quatro consultas", async () => {
     const search = vi.fn().mockResolvedValue([]);
     const provider: SearchProvider = {
       name: "test",
@@ -26,7 +26,7 @@ describe("DocumentSearchProvider", () => {
     expect(search.mock.calls.map(([query]) => query)).toEqual(expect.arrayContaining([
       expect.stringMatching(/edital/),
       expect.stringMatching(/gabarito/),
-      expect.stringMatching(/nota de corte/),
+      expect.stringMatching(/resultado final/),
       expect.stringMatching(/candidatos por vaga/),
     ]));
     expect(search.mock.calls.every(([, options]) => options.limit === 10)).toBe(true);

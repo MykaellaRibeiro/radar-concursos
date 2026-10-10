@@ -10,7 +10,7 @@ O entrypoint é `npm run collect:documents`. O worker fica em `workers/collector
 
 O provider Exa localiza PDFs em domínios oficiais e de bancas. Seus resultados continuam sendo candidatos: somente PDF direto, fonte oficial/banca reconhecida e correspondência explícita com o órgão seguem para download, assinatura, extração e persistência. O manifesto piloto permanece disponível por `--pilot-only` como diagnóstico controlado.
 
-Resultados e classificações também entram no acervo. A extração de nota de corte é deliberadamente estrita: exige a expressão explícita no texto do PDF e preserva trecho, arquivo, fonte e método. Notas comuns, anos e estimativas editoriais não viram nota de corte.
+Resultados e classificações também entram no acervo documental, sempre com a fonte original preservada.
 
 ## Download seguro
 

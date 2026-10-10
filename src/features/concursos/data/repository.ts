@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { areDevelopmentMocksEnabled, isSupabaseConfigured } from "@/lib/supabase/config";
-import type { AnswerKeyDocument, ConcursoDetail, ConcursoStatus, ConfidenceLevel, CutoffScore, DocumentFile, EditalDocument, ProofDocument, ConcursoSummary, ExtractionStatus } from "@/types/domain";
+import type { AnswerKeyDocument, ConcursoDetail, ConcursoStatus, ConfidenceLevel, DocumentFile, EditalDocument, ProofDocument, ConcursoSummary, ExtractionStatus } from "@/types/domain";
 import { mockConcursos, mockDetail } from "./mock";
 import { safeExternalUrl } from "@/lib/utils/external-url";
 
@@ -128,7 +128,7 @@ export async function listConcursos(statuses?: ConcursoStatus[], filters?: Concu
 export async function getConcurso(slug: string): Promise<ConcursoDetail | null> {
   if (!isSupabaseConfigured) return areDevelopmentMocksEnabled ? { ...mockDetail, slug } : null;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("concursos").select("id, slug, titulo, status, confidence, uf, cidade, regiao, descricao, vagas_total, vagas_previstas, salario_min, salario_max, escolaridade_resumo, data_prevista, data_prevista_precision, banca_status, banca_observacao, data_edital, inicio_inscricoes, fim_inscricoes, data_prova, official_url, updated_at, orgaos(nome, sigla), concursos_bancas(bancas(nome)), movimentacoes(id, titulo, descricao, event_date, occurred_at, confidence, movimentacao_fontes(fontes(nome,tipo,ranking_tier), titulo, url, published_at, confidence)), concursos_cargos(id, vagas, salario_inicial, cargos(nome)), editais(id,tipo,numero,ano,titulo,published_at,source_url,url_original,arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome))), provas(id,ano,titulo,turno,tipo,quantidade_questoes,published_at,source_url,url_original,bancas(nome),cargos(nome),arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome)),gabaritos(id,tipo,titulo,published_at,source_url,url_original,arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome)))), notas_corte(id,modalidade,nota,classificacao,ano,source_url,published_at,confidence,cargos(nome),fontes(nome)), arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome))").eq("slug", slug).single();
+  const { data, error } = await supabase.from("concursos").select("id, slug, titulo, status, confidence, uf, cidade, regiao, descricao, vagas_total, vagas_previstas, salario_min, salario_max, escolaridade_resumo, data_prevista, data_prevista_precision, banca_status, banca_observacao, data_edital, inicio_inscricoes, fim_inscricoes, data_prova, official_url, updated_at, orgaos(nome, sigla), concursos_bancas(bancas(nome)), movimentacoes(id, titulo, descricao, event_date, occurred_at, confidence, movimentacao_fontes(fontes(nome,tipo,ranking_tier), titulo, url, published_at, confidence)), concursos_cargos(id, vagas, salario_inicial, cargos(nome)), editais(id,tipo,numero,ano,titulo,published_at,source_url,url_original,arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome))), provas(id,ano,titulo,turno,tipo,quantidade_questoes,published_at,source_url,url_original,bancas(nome),cargos(nome),arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome)),gabaritos(id,tipo,titulo,published_at,source_url,url_original,arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome)))), arquivos(id,tipo,titulo,source_url,storage_bucket,storage_path,extraction_status,sha256,published_at,fontes(nome))").eq("slug", slug).single();
   if (error?.code === "PGRST116") return null;
   if (error) throw error;
   const row = data as unknown as DbConcurso & Record<string, unknown>;
@@ -138,7 +138,6 @@ export async function getConcurso(slug: string): Promise<ConcursoDetail | null> 
   const editalRows = (row.editais ?? []) as Array<Record<string, unknown>>;
   const proofRows = (row.provas ?? []) as Array<Record<string, unknown>>;
   const fileRows = (row.arquivos ?? []) as DbStoredFile[];
-  const cutoffRows = (row.notas_corte ?? []) as Array<Record<string, unknown>>;
   const editais: EditalDocument[] = editalRows.map((item) => {
     const file = item.arquivos as DbStoredFile | null;
     return {
@@ -164,18 +163,6 @@ export async function getConcurso(slug: string): Promise<ConcursoDetail | null> 
     };
   }).sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
   const documentos = fileRows.filter((file) => !["EDITAL", "RETIFICACAO", "PROVA", "GABARITO"].includes(file.tipo)).map((file) => mapStoredFile(file, { id: file.id, kind: file.tipo, title: file.titulo ?? "Documento" }));
-  const notasCorte: CutoffScore[] = cutoffRows.map((cutoff) => ({
-    id: String(cutoff.id),
-    modality: String(cutoff.modalidade),
-    score: Number(cutoff.nota),
-    classification: cutoff.classificacao === null ? null : Number(cutoff.classificacao),
-    year: cutoff.ano === null ? null : Number(cutoff.ano),
-    role: (cutoff.cargos as { nome?: string } | null)?.nome ?? null,
-    sourceUrl: safeExternalUrl(cutoff.source_url as string | null),
-    sourceName: (cutoff.fontes as { nome?: string } | null)?.nome ?? null,
-    publishedAt: cutoff.published_at as string | null,
-    confidence: cutoff.confidence as ConfidenceLevel,
-  })).sort((left, right) => (right.year ?? 0) - (left.year ?? 0) || right.score - left.score);
   return {
     ...mapSummary(row), descricao: row.descricao ?? null, regiao: row.regiao ?? null, dataEdital: row.data_edital ?? null,
     inicioInscricoes: row.inicio_inscricoes ?? null, dataProva: row.data_prova ?? null, officialUrl: safeExternalUrl(row.official_url),
@@ -189,7 +176,7 @@ export async function getConcurso(slug: string): Promise<ConcursoDetail | null> 
       return { id: String(item.id), titulo: String(item.titulo), descricao: item.descricao ? String(item.descricao) : null, eventDate: String(item.event_date), occurredAt: item.occurred_at ? String(item.occurred_at) : null, confidence: item.confidence as ConfidenceLevel, sourceName: sources[0]?.name ?? null, sourceUrl: sources[0]?.url ?? null, sources };
     }),
     cargos: roleRows.map((item) => ({ id: String(item.id), nome: String((item.cargos as { nome?: string })?.nome ?? "Cargo"), vagas: item.vagas as number | null, salarioInicial: item.salario_inicial as number | null })),
-    editais, provas, notasCorte, documentos,
+    editais, provas, documentos,
   };
 }
 

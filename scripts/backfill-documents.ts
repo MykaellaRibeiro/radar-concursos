@@ -22,7 +22,7 @@ function addSummary(total: DocumentCollectionSummary, batch: DocumentCollectionS
   const additive: Array<keyof DocumentCollectionSummary> = [
     "found", "discoveredByExa", "discoveryContestsSearched", "discoveryResultsFound", "discoveryRejected",
     "downloaded", "uploaded", "duplicateFiles", "editaisCreated", "provasCreated", "gabaritosCreated",
-    "resultadosCreated", "cutoffsCreated", "extracted", "partial", "scanned", "failed",
+    "resultadosCreated", "extracted", "partial", "scanned", "failed",
   ];
   for (const key of additive) {
     (total[key] as number) += batch[key] as number;
