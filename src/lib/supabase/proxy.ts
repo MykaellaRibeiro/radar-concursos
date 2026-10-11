@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseConfigured } from "./config";
 
-const protectedPrefixes = ["/dashboard", "/meus-concursos", "/alertas", "/configuracoes", "/estudar", "/questoes/salvas"];
+const protectedPrefixes = ["/dashboard", "/meus-concursos", "/alertas", "/configuracoes"];
 
 export async function updateSession(request: NextRequest) {
   const isProtected = protectedPrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix));

@@ -6,8 +6,8 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
-      allow: ["/", "/concursos", "/concursos/abertos", "/concursos/previstos", "/provas", "/bancas", "/estatisticas"],
-      disallow: ["/api/", "/auth/", "/dashboard", "/meus-concursos", "/alertas", "/configuracoes", "/estudar", "/questoes/salvas"],
+      allow: ["/", "/concursos", "/concursos/abertos", "/concursos/previstos", "/provas"],
+      disallow: ["/api/", "/auth/", "/dashboard", "/meus-concursos", "/alertas", "/configuracoes"],
     },
     sitemap: `${base}/sitemap.xml`,
     host: base,

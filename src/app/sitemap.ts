@@ -12,8 +12,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/concursos/abertos`, changeFrequency: "hourly", priority: 0.9 },
     { url: `${base}/concursos/previstos`, changeFrequency: "daily", priority: 0.9 },
     { url: `${base}/provas`, changeFrequency: "weekly", priority: 0.8 },
-    { url: `${base}/bancas`, changeFrequency: "weekly", priority: 0.7 },
-    { url: `${base}/estatisticas`, changeFrequency: "weekly", priority: 0.7 },
   ];
   if (!isSupabaseConfigured) return staticEntries;
   const supabase = await createClient();

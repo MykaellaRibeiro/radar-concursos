@@ -60,7 +60,7 @@ export default async function ProofDetailPage({
       {questions.items.length ? <div className="question-list">{questions.items.map((question) => <article className="question-row" key={question.id}>
         <div className="question-row__number"><span>Questão</span><strong className="numeric">{String(question.number).padStart(2, "0")}</strong></div>
         <div className="question-row__body"><p>{question.statement}</p><div className="taxonomy-line"><span>{question.discipline?.name ?? "Disciplina não classificada"}</span>{question.subject && <span>{question.subject.name}</span>}{question.subsubject && <span>{question.subsubject.name}</span>}</div></div>
-        <div className="question-row__answer">{question.annulled ? <span className="answer-key answer-key--annulled">Anulada</span> : <span className="answer-key"><small>Gabarito</small><strong className="numeric">{question.answer ?? "—"}</strong></span>}<Link href={`/questoes/${question.id}`}>Abrir questão</Link></div>
+        <div className="question-row__answer">{question.annulled ? <span className="answer-key answer-key--annulled">Anulada</span> : <span className="answer-key"><small>Gabarito</small><strong className="numeric">{question.answer ?? "—"}</strong></span>}</div>
       </article>)}</div> : <div className="panel"><EmptyState title="Nenhuma questão corresponde aos filtros." description="Remova um ou mais filtros para ampliar a busca nesta prova." /></div>}
     </section>
     {proof.contestSlug && <p className="proof-context-link">Este documento pertence a <Link href={`/concursos/${proof.contestSlug}`}>{proof.contestTitle}</Link>.</p>}

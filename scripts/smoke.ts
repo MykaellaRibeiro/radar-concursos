@@ -4,8 +4,7 @@ const base = (process.env.SMOKE_BASE_URL ?? "http://localhost:3000").replace(/\/
 const routes = [
   "/", "/login", "/dashboard", "/concursos", "/concursos/abertos", "/concursos/previstos",
   "/concursos/policia-civil-do-maranhao-2012", "/provas", "/provas/8d159a4e-c485-4cfb-8e4a-39ff79684150",
-  "/questoes/29e88356-5393-437a-9d98-6f711958550e", "/estatisticas", "/estudar", "/meus-concursos",
-  "/questoes/salvas", "/robots.txt", "/sitemap.xml", "/api/health",
+  "/meus-concursos", "/robots.txt", "/sitemap.xml", "/api/health",
 ];
 const results: Array<{ path: string; status: number | null; ok: boolean; error?: string }> = [];
 
